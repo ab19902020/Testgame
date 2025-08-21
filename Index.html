@@ -21,21 +21,19 @@
         /* --- Themes --- */
         .theme-dark {
             --bg-color: #111827; --text-color: #f9fafb; --text-muted-color: #9ca3af;
-            --card-bg-color: #1f2937; --card-text-color: #f9fafb; --card-category-color: #a5b4fc;
             --btn-secondary-bg: rgba(255, 255, 255, 0.1);
         }
         .theme-light {
             --bg-color: #f3f4f6; --text-color: #1f2937; --text-muted-color: #4b5563;
-            --card-bg-color: #ffffff; --card-text-color: #1f2937; --card-category-color: #4f46e5;
             --btn-secondary-bg: rgba(0, 0, 0, 0.1);
         }
         body { background-color: var(--bg-color); color: var(--text-color); }
         .category-btn, #back-to-start-btn, #change-category-btn { background-color: var(--btn-secondary-bg); color: var(--text-color); }
         .category-btn.selected { border: 4px solid #4f46e5; transform: scale(1.05); }
         
-        #card-face { background-color: var(--card-bg-color); }
-        #card-word { color: var(--card-text-color); }
-        #card-category { color: var(--card-category-color); font-weight: 700; }
+        #card-face p {
+            text-shadow: 0px 0px 12px rgba(0,0,0,1), 0px 0px 20px rgba(0,0,0,1);
+        }
         
         .card { transform-style: preserve-3d; transition: transform 0.7s cubic-bezier(0.25, 0.8, 0.25, 1); }
         .card.flipped { transform: rotateY(180deg) scale(1.05); }
@@ -135,10 +133,11 @@
                  <button id="end-round-btn" class="absolute top-4 right-4 bg-white/20 text-white font-bold py-2 px-4 rounded-full btn z-10">End Round</button>
                  <div id="card-area" class="relative w-full h-64" style="perspective: 1000px;">
                     <div id="card" class="card w-full h-full">
-                        <div id="card-face" class="card-face flex items-center justify-center rounded-2xl shadow-2xl p-4">
+                        <div id="card-face" class="card-face flex items-center justify-center rounded-2xl shadow-2xl p-4 bg-cover bg-center">
+                            <div class="absolute inset-0 bg-black/60 rounded-2xl"></div>
                             <div class="text-center relative z-10 p-2">
-                                <p id="card-category" class="text-xl font-bold mb-2"></p>
-                                <p id="card-word" class="font-bold"></p>
+                                <p id="card-category" class="text-xl font-bold mb-2 text-white"></p>
+                                <p id="card-word" class="font-bold text-white"></p>
                             </div>
                         </div>
                          <div class="card-back flex items-center justify-center bg-indigo-500 rounded-2xl shadow-2xl p-4">
@@ -281,7 +280,7 @@
             let timer;
             let timeLeft = 60;
             let score = 0;
-            let words = [];
+            let words = {};
             let currentWordIndex = 0;
             let currentCardData = { word: '', category: '' };
             let selectedCategories = [];
@@ -750,9 +749,25 @@
                 themeToggle.querySelector('span').style.transform = isLight ? 'translateX(1.25rem)' : 'translateX(0.25rem)';
             });
 
-            recordToggle.addEventListener('click', () => {
-                recordPerformance = !recordPerformance;
-                recordToggle.querySelector('span').style.transform = recordPerformance ? 'translateX(1.25rem)' : 'translateX(0.25rem)';
+            recordToggle.addEventListener('click', async () => {
+                const willRecord = !recordPerformance;
+                if (willRecord) {
+                    try {
+                        // Prompt for permission immediately
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        // Stop tracks immediately, we only wanted permission
+                        stream.getTracks().forEach(track => track.stop());
+                        recordPerformance = true;
+                        recordToggle.querySelector('span').style.transform = 'translateX(1.25rem)';
+                    } catch (err) {
+                        alert("You need to allow camera and microphone access to record!");
+                        recordPerformance = false;
+                        recordToggle.querySelector('span').style.transform = 'translateX(0.25rem)';
+                    }
+                } else {
+                    recordPerformance = false;
+                    recordToggle.querySelector('span').style.transform = 'translateX(0.25rem)';
+                }
             });
 
             discardBtn.addEventListener('click', () => {
@@ -766,7 +781,7 @@
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = recordedBlobUrl;
-                a.download = `AI-Charades-Performance-${new Date().getTime()}.webm`;
+                a.download = `HeadRush-Performance-${new Date().getTime()}.webm`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
