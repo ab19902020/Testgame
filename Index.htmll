@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Script Generator</title>
+    <!-- 1. Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 3. Babel to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 4. Custom Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <!-- 5. Custom Styles for the new aesthetic -->
+    <style>
+        /* Define custom font families */
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Deep navy base */
+            overflow: hidden; /* Hide body scrollbars to let the container handle it */
+        }
+        .font-heading { font-family: 'Orbitron', sans-serif; }
+
+        /* Custom scrollbar for a better dark mode experience */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #0d1117; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 190, 255, 0.4); border-radius: 5px; border: 2px solid #0d1117;}
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0, 190, 255, 0.6); }
+
+        /* Animated Gradient Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: radial-gradient(circle at 15% 25%, rgba(0, 190, 255, 0.2), transparent 30%),
+                        radial-gradient(circle at 85% 75%, rgba(19, 78, 94, 0.3), transparent 40%);
+            animation: moveGradient 20s ease-in-out infinite alternate;
+        }
+
+        @keyframes moveGradient {
+            from {
+                transform: translate(0, 0);
+            }
+            to {
+                transform: translate(20px, -20px);
+            }
+        }
+        
+        /* Glassmorphism card effect */
+        .card {
+            background: rgba(13, 17, 23, 0.6); /* Semi-transparent dark background */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(200, 220, 255, 0.1); /* Subtle light border */
+            border-radius: 1rem; /* 16px */
+        }
+        
+        /* Button Styles */
+        .btn {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            transform: translateY(0);
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .btn-primary {
+            background: #00BEFF; /* Bright cyan */
+            color: #0d1117;
+            font-weight: 700;
+        }
+        .btn-primary:hover {
+            background: #33d1ff;
+            box-shadow: 0 0 20px rgba(0, 190, 255, 0.5);
+        }
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-secondary:hover {
+             background-color: rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, Component } = React;
+
+        // --- Error Boundary Component ---
+        class ErrorBoundary extends Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, errorInfo) {
+                console.error("ErrorBoundary caught an error:", error, errorInfo);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+                            <div className="bg-red-900 border border-red-500 p-8 rounded-lg text-center max-w-2xl">
+                                <h1 className="text-3xl font-bold text-yellow-300 mb-4 font-heading">Application Error</h1>
+                                <p className="text-red-200 mb-4">Something went wrong. This is often caused by a JavaScript error during rendering.</p>
+                                <div className="bg-gray-800 p-4 rounded-md text-left text-sm overflow-auto">
+                                    <pre className="text-red-300 whitespace-pre-wrap">
+                                        <code>{this.state.error && this.state.error.toString()}</code>
+                                    </pre>
+                                </div>
+                                <button onClick={() => window.location.reload()} className="mt-6 bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-6 rounded-lg">
+                                    Refresh Page
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+        
+        // --- API Key Modal Component ---
+        const ApiKeyModal = ({ onSave }) => {
+            const [key, setKey] = useState("");
+
+            return (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="card max-w-md w-full p-8 m-4">
+                        <h2 className="text-2xl font-bold text-cyan-300 font-heading text-center">API Key Required</h2>
+                        <p className="text-gray-400 mt-2 mb-6 text-center text-sm">
+                            Please enter your Google AI API key to use this application. Your key is stored securely in your browser's local storage.
+                        </p>
+                        <input
+                            type="password"
+                            value={key}
+                            onChange={(e) => setKey(e.target.value)}
+                            className="w-full bg-gray-900/50 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition-all"
+                            placeholder="Enter your API key..."
+                        />
+                        <button
+                            onClick={() => onSave(key)}
+                            disabled={!key}
+                            className="mt-4 w-full btn btn-primary px-8 py-3 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Save and Continue
+                        </button>
+                         <p className="text-gray-500 text-xs mt-4 text-center">
+                            Don't have a key? Get one from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google AI Studio</a>.
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        function usePrevious(value) {
+            const ref = useRef();
+            useEffect(() => { ref.current = value; });
+            return ref.current;
+        }
+
+        function App() {
+            // --- New State for API Key ---
+            const [apiKey, setApiKey] = useState(null);
+            const [showKeyModal, setShowKeyModal] = useState(false);
+
+            // --- Other States ---
+            const [view, setView] = useState('home');
+            const [writingStyle, setWritingStyle] = useState('The Investigator');
+            const [aiImageStyle, setAiImageStyle] = useState('ultra-realistic');
+            const [selectedCategory, setSelectedCategory] = useState(null);
+            const [selectedGenre, setSelectedGenre] = useState(null);
+            const [suggestions, setSuggestions] = useState([]);
+            const [customTopic, setCustomTopic] = useState("");
+            const [selectedStory, setSelectedStory] = useState(null);
+            const [script, setScript] = useState(null);
+            const [suggestedStyles, setSuggestedStyles] = useState([]);
+            const [loadingMessage, setLoadingMessage] = useState(null);
+            const [error, setError] = useState(null);
+            const [editingState, setEditingState] = useState(null);
+            const [optionsVisible, setOptionsVisible] = useState(null);
+            const [editedPrompt, setEditedPrompt] = useState("");
+            const [pdfScriptsLoaded, setPdfScriptsLoaded] = useState(false);
+            const scriptContainerRef = useRef(null);
+            const prevScriptState = usePrevious(script);
+            
+            // --- API Key Logic ---
+            useEffect(() => {
+                const storedKey = localStorage.getItem('geminiApiKey');
+                if (storedKey) {
+                    setApiKey(storedKey);
+                } else {
+                    setShowKeyModal(true);
+                }
+            }, []);
+
+            const handleSaveApiKey = (key) => {
+                if (key) {
+                    localStorage.setItem('geminiApiKey', key);
+                    setApiKey(key);
+                    setShowKeyModal(false);
+                }
+            };
+            
+            const handleManageKey = () => {
+                const currentKey = localStorage.getItem('geminiApiKey') || "";
+                const newKey = prompt("Enter your new API Key or leave blank to clear:", currentKey);
+                if (newKey !== null) { // User didn't click cancel
+                     if (newKey === "") {
+                        localStorage.removeItem('geminiApiKey');
+                        setApiKey(null);
+                        setShowKeyModal(true);
+                     } else {
+                        localStorage.setItem('geminiApiKey', newKey);
+                        setApiKey(newKey);
+                     }
+                }
+            }
+
+
+            useEffect(() => {
+                if (!prevScriptState && script && scriptContainerRef.current) {
+                    scriptContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, [script, prevScriptState]);
+
+            useEffect(() => {
+                const loadScript = (src) => {
+                    return new Promise((resolve, reject) => {
+                        if (document.querySelector(`script[src="${src}"]`)) {
+                            resolve();
+                            return;
+                        }
+                        const script = document.createElement('script');
+                        script.src = src;
+                        script.onload = () => resolve();
+                        script.onerror = () => reject(new Error(`Script load error for ${src}`));
+                        document.body.appendChild(script);
+                    });
+                };
+                Promise.all([
+                    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'),
+                    loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
+                ]).then(() => setPdfScriptsLoaded(true))
+                  .catch(err => {
+                    console.error("Failed to load PDF scripts:", err);
+                    setError("Could not load PDF generation tools. Please refresh.");
+                });
+            }, []);
+            
+            const topics = {
+                'Military History': ['Forgotten Battles', 'Special Forces Operations', 'Sieges & Last Stands', 'Military Intelligence', 'Revolutionary Wars', 'Ancient Warfare'],
+                'Science & Technology': ['Space Race Secrets', 'Medical Breakthroughs', 'Famous Inventions', 'Archaeological Finds', 'Cyber Warfare Origins', 'Failed Experiments'],
+                'Disasters & Survival': ['Mountaineering Disasters', 'Polar Expeditions', 'Lost at Sea', 'Volcanic Eruptions', 'Nuclear Incidents', 'Wilderness Survival'],
+                'Ancient Worlds': ['Ancient Egypt Mysteries', 'Roman Engineering', 'Lost Cities', 'Viking Sagas', 'Gladiatorial Games', 'Mythological Battles'],
+                'Crime & Espionage': ['Famous Art Heists', 'Unsolved Mysteries', 'Cold Cases', 'Great Escapes', 'Cold War Spies', 'Corporate Espionage'],
+                'True Crime (18+)': ['Serial Killers', 'Cults & Fanaticism', 'Forensic Breakthroughs', 'Organized Crime Syndicates', 'Heists Gone Wrong', 'Art Forgeries'],
+                'Conspiracies & The Unexplained': ['Historical Conspiracies', 'Alien Encounters & UFOs', 'Paranormal Events', 'Cryptids & Monsters', 'Secret Societies', 'Government Cover-ups'],
+                'Psychology & The Mind': ['Famous Psychological Experiments', 'Cases of Mass Hysteria', 'Feral Children', 'Memory & Amnesia', 'Propaganda & Mind Control'],
+                'Exploration & Adventure': ['Age of Discovery Voyages', 'Deep Sea Exploration', 'Lost Expeditions', 'First Ascents', 'Around the World Journeys'],
+                'Art & Culture': ['Stolen Masterpieces', 'Legendary Concerts', 'Literary Hoaxes', 'Rivalries in Art', 'Forbidden Films & Books'],
+                'Business & Innovation': ['The Dot-com Bubble', 'Legendary Entrepreneurs', 'Hostile Takeovers', 'Product Wars (Coke vs Pepsi)', 'Industrial Espionage'],
+                'Myths & Folklore': ['Creatures of Legend', 'Mythical Places', 'Ancient Epics', 'Urban Legends', 'Creation Myths'],
+                'Social & Political': ['Civil Rights Stories', 'Famous Protests', 'Utopian Communities', 'Political Scandals', 'Assassination Plots'],
+                'The Wild West': ['Famous Outlaws', 'Legendary Lawmen', 'Gold Rush Stories', 'Native American Conflicts', 'Cattle Drives'],
+                'The Golden Age of Piracy': ['Famous Pirates', 'Life Aboard a Pirate Ship', 'The Pirate Code', 'Lost Pirate Treasure', 'The War Against Piracy'],
+                'The Darkest Secrets': [ 'Jeffrey Epstein & Elite Pedophile Networks', 'CIA Mind Control Programs (MKUltra)', 'Deep State Political Assassinations (JFK, MLK)', 'Bilderberg Group & Globalist Agendas', 'Big Pharma Cover-ups & Vaccine Injuries', '9/11 Inside Job Evidence', 'The Bohemian Grove & Elite Rituals', 'Federal Reserve & Economic Manipulation', 'COVID-19 Lab Leak Theory & Suppression', 'UFO Reverse Engineering & Cover-ups' ]
+            };
+
+            const writingStyles = {
+                'The Investigator': 'A calm, introspective, and poetic style focusing on the human element.',
+                'The Conspiracist': 'A conversational, humorous, and skeptical voice that dives deep into mysteries.',
+                'The Forensic Analyst': 'A precise, detailed, and objective tone that meticulously pieces together evidence.',
+                'The Deep-Diver': 'An enthusiastic and passionate style that connects many disparate points into a grand theory.',
+                'The Tactician': 'An analytical, objective voice, like a military strategist, focusing on tactics and strategy.',
+                'The Skald': 'A dramatic, epic voice, like a Viking saga-teller, using powerful, archaic language.',
+                'The Chronicler': 'A formal, authoritative voice, like a classic BBC documentarian, focusing on the grand sweep of history.',
+                'The Declassifier': 'A direct, factual, and authoritative voice that presents information like a declassified intelligence briefing.',
+                'The Biographer': 'An intimate, personal style that focuses on the life and psychology of a single individual.',
+                'The Historian': 'A broad, contextual style that connects events to the larger sweep of history.',
+                'The Thriller Author': 'A fast-paced, suspenseful voice that uses cliffhangers and a sense of urgency.',
+                'The Gonzo Journalist': 'A highly personal, subjective, and often humorous first-person perspective.',
+                'The Hard Truth Exposer': 'A aggressive, unfiltered, and fearless style that exposes corruption without holding back. Uses direct, blunt language and treats all official narratives as suspect until proven otherwise. Focuses on motive, opportunity, and the silencing of whistleblowers. Leaves no room for doubt about criminal conspiracies at the highest levels.'
+            };
+
+            const resetApp = () => {
+                setView('home'); setSelectedCategory(null); setSelectedGenre(null); setSuggestions([]);
+                setCustomTopic(""); setSelectedStory(null); setScript(null); setError(null); setLoadingMessage(null);
+            };
+
+            const handleStorySelect = async (story) => {
+                setSelectedStory(story);
+                setView('final-selection');
+                setLoadingMessage('Analyzing story for style suggestions...');
+                try {
+                    const styleNames = Object.keys(writingStyles).join(', ');
+                    const prompt = `Analyze the following story summary: "${story.summary}". Based on its content and tone, which of the following writing styles would be most effective for a YouTube documentary? [${styleNames}]. Return your top 3 recommendations as a JSON array of strings.`;
+                    const result = await generateText(prompt, true, { type: "ARRAY", items: { type: "STRING" } });
+                    const recommended = JSON.parse(result);
+                    setSuggestedStyles(recommended);
+                    if (recommended.length > 0) {
+                        setWritingStyle(recommended[0]);
+                    }
+                } catch (e) {
+                    console.error("Failed to get style suggestions:", e);
+                    setSuggestedStyles([]);
+                } finally {
+                    setLoadingMessage(null);
+                }
+            };
+
+            const fetchStorySuggestions = async (category, genre) => {
+                setLoadingMessage('Finding story ideas...'); setError(null); setSuggestions([]);
+                try {
+                    const prompt = `Based on the category "${category}" and genre "${genre}", generate three compelling and varied true story ideas for a YouTube video. The suggestions can include both well-known and obscure topics, but each should have a clear, engaging angle. Return as a JSON object with a "suggestions" array, each with a "title" and a "summary".`;
+                    const result = await generateText(prompt, true, { type: "OBJECT", properties: { suggestions: { type: "ARRAY", items: { type: "OBJECT", properties: { title: { type: "STRING" }, summary: { type: "STRING" } }, required: ["title", "summary"] } } }, required: ["suggestions"] });
+                    setSuggestions(JSON.parse(result).suggestions); setView('guided-suggestions');
+                } catch (e) { 
+                    setError(`Failed to get suggestions: ${e.message}`);
+                } finally { setLoadingMessage(null); }
+            };
+
+            const handleCustomTopicSubmit = async () => {
+                if (!customTopic) return;
+                setLoadingMessage('Researching your topic...'); setError(null);
+                try {
+                    const prompt = `Research the topic: "${customTopic}". Based on your findings, generate three distinct and compelling true story ideas for a YouTube video. Each idea should present a different angle or focus. Return as a JSON object with a "suggestions" array, each with a "title" and a "summary".`;
+                    const result = await generateText(prompt, true, { type: "OBJECT", properties: { suggestions: { type: "ARRAY", items: { type: "OBJECT", properties: { title: { type: "STRING" }, summary: { type: "STRING" } }, required: ["title", "summary"] } } }, required: ["suggestions"] });
+                    setSuggestions(JSON.parse(result).suggestions);
+                    setView('guided-suggestions');
+                } catch (e) { 
+                    setError(`Failed to research topic: ${e.message}`);
+                } finally { setLoadingMessage(null); }
+            };
+            
+            const getScriptPrompt = () => {
+                const base = `Create a script for a 20-minute YouTube documentary about: "${selectedStory.title}: ${selectedStory.summary}". The script must be a world-class, deep-dive narrative.
+                CRITICAL OUTPUT FORMAT: Output a JSON object with a 'title' and a 'scenes' array. Each scene object MUST contain:
+                1. 'scene_number': (Number).
+                2. 'description_full': (String) A complete, vivid description of the entire scene's action and mood.
+                3. 'description_part_1': (String) A description for a SINGLE, STATIC, CINEMATIC IMAGE representing the first half of the scene. CRITICAL RULES: Describe a still shot, NOT a video sequence. DO NOT use verbs of camera movement like 'pans', 'zooms', 'transitions', 'shifts', or 'fades'. Focus on composition, lighting, and subject matter of one single frame.
+                4. 'description_part_2': (String) A description for a SINGLE, STATIC, CINEMATIC IMAGE representing the second half of the scene. Follow the exact same CRITICAL RULES as description_part_1.
+                5. 'dialogue': (String) The narrator's lines for the entire scene.`;
+                switch (writingStyle) {
+                    case 'The Conspiracist': return `${base} WRITING STYLE: Adopt the persona of a witty, slightly sarcastic, and deeply curious investigator, like the host of "The Why Files". The tone should be conversational and humorous, but grounded in detailed research. Weave in facts, dates, and data points, but always with an eye for the strange and unexplained. Connect seemingly unrelated events and raise compelling "what if" questions. End scenes on cliffhangers that make the viewer question everything.`;
+                    case 'The Forensic Analyst': return `${base} WRITING STYLE: Adopt the persona of a forensic analyst or historian, like the narrator of "LEMMiNO". The tone must be precise, objective, and almost academic, but utterly compelling. Focus on meticulously piecing together evidence, presenting facts and timelines in a clear, logical sequence. Build the narrative through the careful revelation of information, creating a sense of a complex puzzle being solved. The language should be sophisticated and the pacing deliberate.`;
+                    case 'The Deep-Diver': return `${base} WRITING STYLE: Adopt the persona of an enthusiastic, passionate deep-diver, like the host of "Wendigoon". The tone should be that of a friend excitedly explaining a fascinating, complex topic. Connect many disparate points, historical facts, and obscure details into a grand, all-encompassing theory or narrative. Use an "iceberg" structure, starting with the known facts and progressively delving into more obscure and speculative layers.`;
+                    case 'The Tactician': return `${base} WRITING STYLE: Adopt the persona of a military strategist or historian, like the narrator of "The Operations Room". The tone must be analytical, objective, and highly detailed. Focus on the tactical and strategic elements of the story: troop movements, equipment specifics, command decisions, and the chain of events. Use precise, clear language, avoiding overly emotional or speculative phrasing. The narrative should be driven by the cause-and-effect of key decisions.`;
+                    case 'The Skald': return `${base} WRITING STYLE: Adopt the persona of a Norse skald or saga-teller, inspired by channels like "Dr. Jackson Crawford". The tone should be epic, dramatic, and slightly archaic. Use powerful, evocative language that speaks of honor, fate, and the harsh realities of the Viking age. Focus on the deeds of legendary figures, the clash of cultures, and the mythic undertones of historical events.`;
+                    case 'The Chronicler': return `${base} WRITING STYLE: Adopt the persona of a formal historian or chronicler, in the style of a classic BBC documentary. The tone must be authoritative, clear, and dignified. Focus on the grand sweep of history, lineage, political intrigue, and the chronological unfolding of events. The narrative should be well-structured and present a comprehensive, balanced view of the subject.`;
+                    case 'The Declassifier': return `${base} WRITING STYLE: Adopt the persona of an intelligence analyst briefing a superior, in the style of the YouTube channel "Blackfiles". The tone is direct, factual, and authoritative. Present information clearly and concisely, focusing on "what exactly was happening." The narrative should be structured as a chronological report, revealing information as it would appear in a declassified document.`;
+                    case 'The Biographer': return `${base} WRITING STYLE: Adopt the persona of an intimate biographer. The narrative should focus deeply on the life, motivations, and psychology of a key individual in the story. The tone is personal and empathetic, exploring the subject's inner world and how their character shaped the events around them.`;
+                    case 'The Historian': return `${base} WRITING STYLE: Adopt the persona of a university historian. The tone is academic but accessible, focused on placing the story within its broader historical context. Explain the "why" behind the "what," connecting the events to the social, political, and economic forces of the era.`;
+                    case 'The Thriller Author': return `${base} WRITING STYLE: Adopt the persona of a thriller novelist like Tom Clancy or Lee Child. The tone is fast-paced, tense, and action-oriented. Use short, punchy sentences and build suspense with cliffhangers and dramatic reveals. Focus on the operational details and the high stakes of the situation.`;
+                    case 'The Gonzo Journalist': return `${base} WRITING STYLE: Adopt the persona of a gonzo journalist like Hunter S. Thompson. The tone is highly personal, subjective, satirical, and often humorous. Write in the first person, injecting your own feelings and exaggerated reactions into the narrative. The style should be energetic, chaotic, and filled with vivid, unconventional descriptions.`;
+                    case 'The Hard Truth Exposer': return `${base} WRITING STYLE: Adopt the persona of an aggressive, fearless investigative journalist who exposes high-level corruption and cover-ups. The tone is urgent, angry, and defiant. Do not soften language or present "both sides" of a criminal conspiracy. State facts as definitive truths. Focus on: 1. MOTIVE (Why the powerful would commit these acts). 2. OPPORTUNITY (How systems were exploited). 3. THE SUPPRESSION OF EVIDENCE (Whistleblower deaths, media blackouts, official obfuscation). Explicitly name names and organizations. Treat official narratives as deliberate lies. This is not a theory; it is an exposé of confirmed criminality at the highest levels of power.`;
+                    case 'The Investigator': default: return `${base} WRITING STYLE: Act as a master storyteller in the style of the YouTube channel "The Fern". The tone should be calm, introspective, deeply human, and slightly melancholic. Center the narrative on the personal, human elements of the story. Use a deliberate, thoughtful pace. The language should be poetic, metaphorical, and evocative, but always clear and grounded in fact. Avoid sensationalism. Start with a small, seemingly insignificant detail and expand outwards to the larger historical context.`;
+                }
+            };
+
+            const generateContent = async () => {
+                if (!selectedStory) return;
+                setView('script');
+                setLoadingMessage('Crafting your narrative...'); setError(null); setScript(null);
+                try {
+                    const scriptPrompt = getScriptPrompt();
+                    const scriptResult = await generateText(scriptPrompt, true, { type: "OBJECT", properties: { title: { type: "STRING" }, scenes: { type: "ARRAY", items: { type: "OBJECT", properties: { scene_number: { type: "NUMBER" }, description_full: { type: "STRING" }, description_part_1: { type: "STRING" }, description_part_2: { type: "STRING" }, dialogue: { type: "STRING" } }, required: ["scene_number", "description_full", "description_part_1", "description_part_2", "dialogue"] } } }, required: ["title", "scenes"] });
+                    const parsedScript = JSON.parse(scriptResult);
+                    parsedScript.scenes = parsedScript.scenes.map(scene => ({...scene, media: { ai1: 'loading', ai2: 'loading' }}));
+                    setScript(parsedScript);
+
+                    for (let i = 0; i < parsedScript.scenes.length; i++) {
+                        setLoadingMessage(`Generating 2 images for Scene ${i + 1}...`);
+                        const scene = parsedScript.scenes[i];
+                        const aiImagePromise1 = generateImageWithRetry(scene.description_part_1);
+                        const aiImagePromise2 = generateImageWithRetry(scene.description_part_2);
+                        const [aiImageResult1, aiImageResult2] = await Promise.all([aiImagePromise1, aiImagePromise2]);
+                        setScript(cs => cs && {...cs, scenes: cs.scenes.map((s, idx) => idx === i ? {...s, media: { ai1: aiImageResult1, ai2: aiImageResult2 }} : s)});
+                    }
+                } catch (e) { 
+                    console.error("Error generating content:", e);
+                    setError(`Script generation failed: ${e.message}`);
+                } finally { setLoadingMessage(null); }
+            };
+            
+            const handleRegenerateImage = async (scene, imageIndex, promptOverride = null) => {
+                setLoadingMessage(`Regenerating image ${imageIndex} for Scene ${scene.scene_number}...`);
+                try {
+                    const description = promptOverride || (imageIndex === 1 ? scene.description_part_1 : scene.description_part_2);
+                    const imageUrl = await generateImageWithRetry(description);
+                    setScript(cs => ({...cs, scenes: cs.scenes.map(s => {
+                        if (s.scene_number === scene.scene_number) {
+                            const newMedia = {...s.media};
+                            newMedia[`ai${imageIndex}`] = imageUrl;
+                            return {...s, media: newMedia};
+                        }
+                        return s;
+                    })}));
+                } catch (e) { setError(`Failed to regenerate image: ${e.message}`);
+                } finally { setLoadingMessage(null); setEditingState(null); }
+            };
+
+            const saveAsPDF = async () => {
+                if (!script || !pdfScriptsLoaded) return;
+                setLoadingMessage('Preparing PDF...');
+                const { jsPDF } = window.jspdf;
+                const html2canvas = window.html2canvas;
+                const doc = new jsPDF('p', 'pt', 'a4');
+                const margin = 40, pageWidth = doc.internal.pageSize.getWidth(), pageHeight = doc.internal.pageSize.getHeight(), usableWidth = pageWidth - margin * 2;
+                let y = margin;
+
+                doc.setFontSize(24).text(script.title, pageWidth / 2, y, { align: 'center' }); y += 40;
+
+                for (const scene of script.scenes) {
+                    if (y > pageHeight - 300) { doc.addPage(); y = margin; }
+                    doc.setFontSize(14).setFont(undefined, 'bold').text(`Scene ${scene.scene_number}`, margin, y); y += 20;
+                    doc.setFontSize(10).setFont(undefined, 'italic');
+                    const descLines = doc.splitTextToSize(`Description: ${scene.description_full}`, usableWidth);
+                    doc.text(descLines, margin, y); y += descLines.length * 12 + 10;
+                    doc.setFontSize(10).setFont(undefined, 'normal');
+                    const dialogueLines = doc.splitTextToSize(`Narration: ${scene.dialogue}`, usableWidth);
+                    doc.text(dialogueLines, margin, y); y += dialogueLines.length * 12 + 20;
+
+                    const addImageToPdf = async (elementId) => {
+                        const element = document.getElementById(elementId);
+                        if (element) {
+                            try {
+                                const canvas = await html2canvas(element, { useCORS: true, logging: false, scale: 2 });
+                                const imgData = canvas.toDataURL('image/png');
+                                const imgProps = doc.getImageProperties(imgData);
+                                const imgHeight = (imgProps.height * usableWidth) / imgProps.width;
+                                if (y + imgHeight > pageHeight - margin) { doc.addPage(); y = margin; }
+                                doc.addImage(imgData, 'PNG', margin, y, usableWidth, imgHeight); y += imgHeight + 20;
+                            } catch (err) { console.error("PDF image capture error:", err); }
+                        }
+                    };
+                    
+                    await addImageToPdf(`scene-media-ai1-${scene.scene_number}`);
+                    await addImageToPdf(`scene-media-ai2-${scene.scene_number}`);
+                }
+                doc.save(`${script.title.replace(/ /g, '_')}.pdf`);
+                setLoadingMessage(null);
+            };
+            
+            const saveAllImages = () => {
+                if (!script) return;
+                setLoadingMessage('Preparing images for download...');
+                script.scenes.forEach((scene) => {
+                    [1, 2].forEach(imgIndex => {
+                        const imgData = scene.media[`ai${imgIndex}`];
+                        if (imgData && !imgData.startsWith('https://placehold.co') && imgData !== 'loading') {
+                            const link = document.createElement('a');
+                            link.href = imgData;
+                            link.download = `${script.title.replace(/ /g, '_')}_Scene_${scene.scene_number}_Image_${imgIndex}.png`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }
+                    });
+                });
+                setLoadingMessage(null);
+            };
+
+            const generateText = async (prompt, isJson = false, schema = null) => {
+                if (!apiKey) throw new Error("API Key is not set.");
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                if (isJson && schema) payload.generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+                
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({ error: { message: "Could not parse error response." } }));
+                    console.error("API Error Response:", errorBody);
+                    const errorMessage = errorBody?.error?.message || `API call failed with status: ${response.status}`;
+                    throw new Error(errorMessage);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    console.error("Unexpected API Response Format:", result);
+                    throw new Error('The AI returned an empty or invalid response.');
+                }
+            };
+
+
+            const generateImageWithRetry = async (description) => {
+                const negativePrompt = " Under no circumstances should the image depict a narrator, a person speaking into a microphone, or a podcast-style setting. Focus only on the historical scene itself.";
+                let stylePrompt = "CRITICAL COMMAND: The final image MUST be generated with a cinematic 16:9 aspect ratio (e.g., 1920x1080 pixels). This is a mandatory, non-negotiable requirement. A photorealistic, cinematic still from a historical drama film. Moody, atmospheric lighting (e.g., chiaroscuro, volumetric light), shallow depth of field, film grain. Focus on gritty realism and emotional weight. Maintain this exact visual style consistently across all images. DO NOT create a montage, split-screen, or comic book panel layout. The output must be ONE image.";
+                if (aiImageStyle === 'animated') {
+                    stylePrompt = "CRITICAL COMMAND: The final image MUST be generated with a cinematic 16:9 aspect ratio (e.g., 1920x1080 pixels). This is a mandatory, non-negotiable requirement. CRITICAL Art Style: A mature, gritty, 3D animation style with a distinct cel-shaded, painterly look. The style is serious and realistic, exactly like the video game series 'The Walking Dead' by Telltale Games or the series 'Arcane'. The image MUST have dramatic, high-contrast lighting, visible ink lines on characters, and a serious, non-cartoonish tone. ABSOLUTELY NO PIXAR, DISNEY, OR FAMILY-FRIENDLY STYLES. Maintain this exact Telltale/Arcane visual style consistently across all images. DO NOT create a montage, split-screen, or comic book panel layout. The output must be ONE image.";
+                } else if (aiImageStyle === 'graphic-novel') {
+                    stylePrompt = "CRITICAL COMMAND: The final image MUST be generated with a cinematic 16:9 aspect ratio (e.g., 1920x1080 pixels). This is a mandatory, non-negotiable requirement. A high-quality, realistic historical graphic novel style. The image must have strong, clean ink lines, realistic human proportions, and detailed backgrounds. The lighting should be cinematic and moody, creating a sense of drama. The color palette should be sophisticated and grounded in realism. This is a serious, mature comic book style, NOT a simplistic or stylized cartoon. Maintain this exact visual style consistently across all images. DO NOT create a montage, split-screen, or comic book panel layout. The output must be ONE image.";
+                }
+                const fullPrompt = `${stylePrompt} The scene to depict is: "${description}". ${negativePrompt}`;
+
+                for (let i = 0; i < 3; i++) {
+                    try { return await generateImage(fullPrompt); } 
+                    catch (error) {
+                        console.error(`Image generation attempt ${i + 1} failed:`, error);
+                        if (i === 2) {
+                           throw error; 
+                        }
+                        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
+                    }
+                }
+            };
+
+            const generateImage = async (prompt) => {
+                if (!apiKey) throw new Error("API Key is not set.");
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+                const payload = { instances: [{ prompt }], parameters: { "sampleCount": 1, "aspect_ratio": "16:9" } };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({ error: { message: "Could not parse error response." } }));
+                    console.error("Image API Error Response:", errorBody);
+                    const errorMessage = errorBody?.error?.message || `API call failed with status: ${response.status}`;
+                    throw new Error(errorMessage);
+                }
+
+                const result = await response.json();
+                if (result.predictions?.[0]?.bytesBase64Encoded) {
+                    return `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                } else {
+                    console.error("Unexpected Image API Response Format:", result);
+                    throw new Error('The AI image generator returned an empty or invalid response.');
+                }
+            };
+            
+            // Render the main app only if API key is present
+            if (!apiKey || showKeyModal) {
+                 return <ApiKeyModal onSave={handleSaveApiKey} />;
+            }
+
+            return (
+                <div className="h-screen w-screen overflow-y-auto">
+                    {loadingMessage && <div className="fixed top-0 left-0 w-full h-16 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 shadow-lg"><div className="w-6 h-6 border-4 border-dashed rounded-full animate-spin border-cyan-400"></div><p className="ml-4 text-lg text-cyan-300 font-heading tracking-wider">{loadingMessage}</p></div>}
+                    <div className="container mx-auto p-4 md:p-8 pt-16 md:pt-24">
+                        <header className="text-center mb-12">
+                            <h1 className="text-4xl md:text-6xl font-bold text-white font-heading tracking-widest uppercase">AI Script Engine</h1>
+                            <p className="text-cyan-400/80 mt-2 text-lg">World-Class Storytelling & Visuals</p>
+                             <nav className="mt-6 flex justify-center gap-4">
+                                <button onClick={resetApp} className="btn btn-secondary px-6 py-2 rounded-lg text-white font-semibold">New Project</button>
+                                <button onClick={handleManageKey} className="btn btn-secondary px-6 py-2 rounded-lg text-white font-semibold">Manage Key</button>
+                            </nav>
+                        </header>
+                        {error && <div className="card bg-red-500/20 border-red-500/50 text-red-300 px-4 py-3 rounded-lg text-center mb-8" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
+                        
+                        {view === 'home' && <div className="card max-w-4xl mx-auto p-6 md:p-8"><h2 className="text-2xl font-semibold mb-6 text-center text-white font-heading">Choose Your Method</h2><div className="grid md:grid-cols-2 gap-6 md:gap-8"><div className="card p-6 rounded-lg text-center cursor-pointer hover:border-cyan-400/50 transition-all duration-300 transform hover:-translate-y-1" onClick={() => setView('guided-category')}><h2 className="text-2xl font-bold text-cyan-400 font-heading">Guided Creation</h2><p className="mt-2 text-gray-400">Get unique story ideas.</p></div><div className="card p-6 rounded-lg text-center cursor-pointer hover:border-amber-400/50 transition-all duration-300 transform hover:-translate-y-1" onClick={() => setView('custom')}><h2 className="text-2xl font-bold text-amber-400 font-heading">Custom Topic</h2><p className="mt-2 text-gray-400">Enter your own subject.</p></div></div></div>}
+                        
+                        {view === 'guided-category' && <div className="card max-w-6xl mx-auto p-6 md:p-8"><h2 className="text-2xl font-semibold mb-6 text-center text-white font-heading">Step 1: Choose a Category</h2><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">{Object.keys(topics).map(cat => (<button key={cat} onClick={() => { setSelectedCategory(cat); setView('guided-genre'); }} className="p-4 card text-cyan-300 hover:bg-cyan-400/10 hover:border-cyan-400/50 transition-all duration-300 text-center font-semibold rounded-lg">{cat}</button>))}</div></div>}
+                        
+                        {view === 'guided-genre' && selectedCategory && <div className="card max-w-6xl mx-auto p-6 md:p-8"><h2 className="text-2xl font-semibold mb-6 text-center text-white font-heading">Step 2: Select a Genre in "{selectedCategory}"</h2><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">{topics[selectedCategory].map(genre => (<button key={genre} onClick={() => { setSelectedGenre(genre); fetchStorySuggestions(selectedCategory, genre); }} className="p-4 card text-amber-300 hover:bg-amber-400/10 hover:border-amber-400/50 transition-all duration-300 text-center font-semibold rounded-lg">{genre}</button>))}</div><button onClick={() => setView('guided-category')} className="mt-8 text-gray-400 hover:text-white transition-colors block mx-auto">← Back to Categories</button></div>}
+                        
+                        {view === 'guided-suggestions' && <div className="card max-w-4xl mx-auto p-6 md:p-8"><h2 className="text-2xl font-semibold mb-6 text-center text-white font-heading">Step 3: Choose a Story</h2><div className="space-y-4">{suggestions.map((story, index) => (<div key={index} onClick={() => handleStorySelect(story)} className="p-4 card rounded-lg cursor-pointer hover:border-purple-400/50 transition-all duration-300 transform hover:scale-[1.02]"><h3 className="font-bold text-lg text-purple-300">{story.title}</h3><p className="text-gray-400 text-sm mt-1">{story.summary}</p></div>))}</div><div className="flex justify-center gap-4 mt-8"><button onClick={() => setView('guided-genre')} className="btn btn-secondary px-6 py-2 rounded-lg text-white">← Back</button><button onClick={() => fetchStorySuggestions(selectedCategory, selectedGenre)} disabled={!!loadingMessage} className="btn btn-primary px-6 py-2 rounded-lg disabled:opacity-50">Get New Ideas</button></div></div>}
+
+                        {view === 'custom' && <div className="card max-w-2xl mx-auto p-6 md:p-8"><h2 className="text-2xl font-semibold mb-4 text-center text-white font-heading">Enter a Custom Topic</h2><p className="text-center text-gray-400 mb-6">Enter a person, event, or concept. The AI will research it and generate story angles.</p><textarea value={customTopic} onChange={(e) => setCustomTopic(e.target.value)} className="w-full bg-gray-900/50 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none transition-all h-28" placeholder="e.g., 'The Great Emu War' or 'Hedy Lamarr's inventions'"></textarea><button onClick={handleCustomTopicSubmit} disabled={!!loadingMessage} className="mt-6 w-full btn bg-amber-500 text-black font-bold px-8 py-3 text-lg rounded-lg shadow-lg hover:bg-amber-400 hover:shadow-amber-500/20 disabled:bg-gray-600 disabled:shadow-none disabled:opacity-50">Find Story Angles</button></div>}
+                        
+                        {view === 'final-selection' && selectedStory && (
+                            <div className="max-w-4xl mx-auto text-center">
+                                <div className="card p-6 md:p-8">
+                                    <h2 className="text-3xl font-bold font-heading text-white">{selectedStory.title}</h2>
+                                    <p className="text-gray-400 mt-2 mb-8 max-w-2xl mx-auto">{selectedStory.summary}</p>
+                                    <div className="bg-black/20 p-6 rounded-lg text-left grid md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-lg font-semibold text-cyan-300 mb-2 font-heading">Narrator Style</label>
+                                            <select value={writingStyle} onChange={e => setWritingStyle(e.target.value)} className="w-full bg-gray-900/50 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition-all">
+                                                {suggestedStyles.length > 0 && <optgroup label="Recommended">{suggestedStyles.map(s => <option key={s} value={s}>{s}</option>)}</optgroup>}
+                                                <optgroup label="All Styles">{Object.keys(writingStyles).map(s => <option key={s} value={s}>{s}</option>)}</optgroup>
+                                            </select>
+                                            <p className="text-gray-400 text-sm mt-2">{writingStyles[writingStyle]}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-lg font-semibold text-amber-300 mb-2 font-heading">AI Image Style</label>
+                                            <select value={aiImageStyle} onChange={e => setAiImageStyle(e.target.value)} className="w-full bg-gray-900/50 p-3 rounded-md border border-gray-600 focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none transition-all">
+                                                <option value="ultra-realistic">Ultra-Realistic Cinematic</option>
+                                                <option value="animated">Animated (Telltale/Arcane)</option>
+                                                <option value="graphic-novel">Graphic Novel</option>
+                                            </select>
+                                            <p className="text-gray-400 text-sm mt-2">
+                                                {aiImageStyle === 'ultra-realistic' && 'Photorealistic stills from a historical drama film.'}
+                                                {aiImageStyle === 'animated' && 'Mature, gritty 3D animation with a painterly look.'}
+                                                {aiImageStyle === 'graphic-novel' && 'High-quality, realistic historical comic book art.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button onClick={generateContent} disabled={!!loadingMessage} className="mt-8 w-full btn bg-purple-600 text-white px-8 py-4 text-xl font-bold rounded-lg shadow-lg hover:bg-purple-500 hover:shadow-purple-500/20 disabled:bg-gray-600 disabled:opacity-50 transition-all transform hover:scale-105">
+                                        Generate Script & Visuals
+                                    </button>
+                                    <button onClick={() => setView('guided-suggestions')} className="mt-4 text-gray-400 hover:text-white transition-colors">← Back to Suggestions</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'script' && script && (
+                            <div ref={scriptContainerRef} className="max-w-5xl mx-auto">
+                                <div className="card p-6 rounded-lg mb-8 text-center">
+                                    <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 font-heading">{script.title}</h2>
+                                    <div className="mt-6 flex flex-wrap justify-center gap-4">
+                                        <button onClick={saveAsPDF} disabled={!pdfScriptsLoaded || !!loadingMessage} className="btn bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50">Download PDF</button>
+                                        <button onClick={saveAllImages} disabled={!!loadingMessage} className="btn bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50">Download Images</button>
+                                    </div>
+                                </div>
+                                <div className="space-y-12">
+                                    {script.scenes.map((scene) => (
+                                        <div key={scene.scene_number} className="card p-4 md:p-6 rounded-lg shadow-xl">
+                                            <h3 className="text-2xl font-bold text-purple-300 border-b-2 border-purple-500/30 pb-2 mb-4 font-heading">Scene {scene.scene_number}</h3>
+                                            <div className="grid md:grid-cols-5 gap-6">
+                                                <div className="md:col-span-2 space-y-4">
+                                                    {[1, 2].map(imageIndex => (
+                                                        <div key={imageIndex} className="relative group">
+                                                            {scene.media[`ai${imageIndex}`] === 'loading' ? (
+                                                                <div className="aspect-video bg-black/20 rounded-lg flex items-center justify-center border border-gray-700"><div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-cyan-400"></div></div>
+                                                            ) : (
+                                                                <>
+                                                                    <img id={`scene-media-ai${imageIndex}-${scene.scene_number}`} src={scene.media[`ai${imageIndex}`]} alt={`AI visual for scene ${scene.scene_number}, part ${imageIndex}`} className="w-full aspect-video rounded-lg object-cover" crossOrigin="anonymous" />
+                                                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button onClick={() => setOptionsVisible(ov => (ov?.scene_number === scene.scene_number && ov?.imageIndex === imageIndex) ? null : { scene_number: scene.scene_number, imageIndex })} className="bg-black/60 hover:bg-black/80 text-white rounded-full p-2 focus:outline-none backdrop-blur-sm">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                                                                        </button>
+                                                                        {optionsVisible?.scene_number === scene.scene_number && optionsVisible?.imageIndex === imageIndex && (
+                                                                            <div className="absolute right-0 mt-2 w-48 card bg-gray-900/80 border-gray-700 rounded-md shadow-lg z-10">
+                                                                                <button onClick={() => { handleRegenerateImage(scene, imageIndex); setOptionsVisible(null); }} className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700/50">Regenerate</button>
+                                                                                <button onClick={() => { setEditingState({ scene_number: scene.scene_number, imageIndex }); setEditedPrompt(imageIndex === 1 ? scene.description_part_1 : scene.description_part_2); setOptionsVisible(null); }} className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700/50">Edit & Regenerate</button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                            {editingState?.scene_number === scene.scene_number && editingState?.imageIndex === imageIndex && (
+                                                                <div className="absolute inset-0 bg-black/80 p-4 flex flex-col rounded-lg card">
+                                                                    <textarea value={editedPrompt} onChange={e => setEditedPrompt(e.target.value)} className="w-full flex-grow bg-gray-800 text-white p-2 rounded-md text-sm border border-gray-600" />
+                                                                    <div className="flex justify-end gap-2 mt-2">
+                                                                        <button onClick={() => setEditingState(null)} className="btn btn-secondary px-3 py-1 rounded-md text-sm">Cancel</button>
+                                                                        <button onClick={() => handleRegenerateImage(scene, imageIndex, editedPrompt)} className="btn bg-green-600 px-3 py-1 rounded-md text-sm text-white">Regenerate</button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="md:col-span-3">
+                                                    <div className="bg-black/20 p-4 rounded-lg h-full flex flex-col">
+                                                         <h4 className="font-semibold text-cyan-300 mb-2 font-heading">Narration</h4>
+                                                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed flex-grow">{scene.dialogue}</p>
+                                                        <div className="mt-4 border-t border-gray-700 pt-3">
+                                                            <h4 className="font-semibold text-gray-400 text-sm">Visual Description</h4>
+                                                            <p className="text-gray-500 text-sm italic">{scene.description_full}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )
+        }
+        
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
+
+    </script>
+</body>
+</html>
+
+
