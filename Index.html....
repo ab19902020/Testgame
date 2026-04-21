@@ -1,0 +1,757 @@
+```react
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  RefreshCw, Share2, User, Circle, Square, Trophy, Loader2, 
+  ChevronRight, ArrowLeft, Filter, Users, ShieldAlert, Star, AlertCircle, Popcorn
+} from 'lucide-react';
+
+// ── TMDB API Key ──
+const TMDB_KEY = '3ea9e43d0b879725ac8fda707021e858';
+
+// ── Movie Categories (Strict Animation Firewall) ──
+const MOVIE_CATS = [
+  { id: 'popular', name: 'POPULAR BLOCKBUSTERS', icon: '🔥', endpoint: '/discover/movie?sort_by=popularity.desc&with_original_language=en&without_genres=16' },
+  { id: 'top_rated', name: 'TOP RATED OF ALL TIME', icon: '⭐', endpoint: '/discover/movie?sort_by=vote_average.desc&vote_count.gte=4000&with_original_language=en&without_genres=16' },
+  { id: 'action', name: 'ACTION & ADVENTURE', icon: '💥', endpoint: '/discover/movie?with_genres=28&sort_by=popularity.desc&with_original_language=en&without_genres=16' },
+  { id: 'comedy', name: 'COMEDY CLASSICS', icon: '😂', endpoint: '/discover/movie?with_genres=35&sort_by=popularity.desc&with_original_language=en&without_genres=16' },
+  { id: 'horror', name: 'HORROR & THRILLERS', icon: '🔪', endpoint: '/discover/movie?with_genres=27&sort_by=popularity.desc&with_original_language=en&without_genres=16' },
+  { id: 'scifi', name: 'SCI-FI & FANTASY', icon: '👽', endpoint: '/discover/movie?with_genres=878&sort_by=popularity.desc&with_original_language=en&without_genres=16' },
+  { id: 'animation', name: 'ANIMATED HITS', icon: '🎨', endpoint: '/discover/movie?with_genres=16&sort_by=popularity.desc&with_original_language=en' }
+];
+
+// ── 250+ Ultimate Football Legends ──
+const LEGENDS_DATA = [
+  "Thierry Henry", "Dennis Bergkamp", "Patrick Vieira", "Tony Adams", "Ian Wright", "Robert Pires", "Freddie Ljungberg", "Sol Campbell", "David Seaman", "Cesc Fabregas", "Robin van Persie", "Ashley Cole",
+  "Ryan Giggs", "Paul Scholes", "Roy Keane", "Wayne Rooney", "Eric Cantona", "Rio Ferdinand", "Nemanja Vidic", "Peter Schmeichel", "Gary Neville", "Ruud van Nistelrooy", "David Beckham", "Cristiano Ronaldo", "George Best", "Bobby Charlton", "Denis Law", "Edwin van der Sar", "Patrice Evra", "Andy Cole", "Dwight Yorke", "Michael Carrick",
+  "Frank Lampard", "Didier Drogba", "John Terry", "Petr Cech", "Eden Hazard", "Gianfranco Zola", "Claude Makelele", "Michael Essien", "Ricardo Carvalho", "Branislav Ivanovic", "Joe Cole",
+  "Steven Gerrard", "Ian Rush", "Kenny Dalglish", "Robbie Fowler", "Michael Owen", "Jamie Carragher", "Xabi Alonso", "Fernando Torres", "John Barnes", "Alan Hansen", "Graeme Souness", "Kevin Keegan",
+  "Sergio Aguero", "David Silva", "Vincent Kompany", "Yaya Toure", "Kevin De Bruyne", "Colin Bell", "Carlos Tevez",
+  "Alan Shearer", "Matt Le Tissier", "Gareth Bale", "Les Ferdinand", "Teddy Sheringham", "Robbie Keane", "Gary Speed", "Shay Given", "Jay-Jay Okocha",
+  "Pele", "Diego Maradona", "Lionel Messi", "Ronaldo", "Ronaldinho", "Zico", "Romario", "Rivaldo", "Gabriel Batistuta", "Garrincha", "Jairzinho", "Carlos Alberto", "Roberto Carlos", "Cafu", "Dani Alves", "Socrates", "Didi", "Rivelino", "Diego Forlan", "Javier Zanetti",
+  "Johan Cruyff", "Zinedine Zidane", "Franz Beckenbauer", "Michel Platini", "Alfredo Di Stefano", "Ferenc Puskas", "Eusebio", "Marco van Basten", "Gerd Muller", "Lev Yashin", "Paolo Maldini", "Franco Baresi", "Lothar Matthaus", "Roberto Baggio", "Xavi", "Andres Iniesta", "Gianluigi Buffon", "Iker Casillas", "Andrea Pirlo", "Luis Figo", "Francesco Totti", "Alessandro Del Piero", "Jurgen Klinsmann", "Oliver Kahn", "Hristo Stoichkov", "Gheorghe Hagi", "Pavel Nedved", "Lilian Thuram", "Marcel Desailly", "Fabio Cannavaro", "Alessandro Nesta", "Carles Puyol", "Sergio Ramos", "Gerard Pique", "Philipp Lahm", "Just Fontaine", "Jean-Pierre Papin", "Franck Ribery", "Arjen Robben", "Wesley Sneijder", "Clarence Seedorf", "Edgar Davids", "Frank Rijkaard", "Ronald Koeman", "Jaap Stam", "Luka Modric", "Davor Suker", "Andriy Shevchenko", "Raul", "Fernando Hierro", "David Villa",
+  "George Weah", "Samuel Eto'o", "Abedi Pele", "Roger Milla", "Nwankwo Kanu", "Hidetoshi Nakata", "Park Ji-sung", "Cha Bum-kun", "Son Heung-min", "Ali Daei"
+];
+
+// ── Smart Direct-Routing Sports Configuration ──
+const SPORTS = [
+  { id: 'Legends', name: 'FOOTBALL LEGENDS', icon: '🏆', filterSport: 'Soccer', modes: [{ label: 'ALL ICONS', val: 'All' }] },
+  { id: 'Soccer', name: 'SOCCER', icon: '⚽', filterSport: 'Soccer', modes: [{ label: 'ALL POSITIONS', val: 'All' }, { label: 'ONLY FORWARDS', val: 'Forward' }, { label: 'ONLY MIDFIELDERS', val: 'Midfield' }, { label: 'ONLY DEFENDERS', val: 'Defend' }, { label: 'ONLY GOALKEEPERS', val: 'Goalkeeper' }] },
+  { id: 'Basketball', name: 'NBA', icon: '🏀', filterSport: 'Basketball', directLeague: 'NBA', modes: [{ label: 'ALL POSITIONS', val: 'All' }, { label: 'ONLY GUARDS', val: 'Guard' }, { label: 'ONLY FORWARDS', val: 'Forward' }, { label: 'ONLY CENTERS', val: 'Center' }] },
+  { id: 'Motorsport', name: 'F1', icon: '🏎️', filterSport: 'Motorsport', directLeague: 'Formula 1', modes: [{ label: 'ALL DRIVERS', val: 'All' }] },
+  { id: 'American Football', name: 'NFL', icon: '🏈', filterSport: 'American Football', directLeague: 'NFL', modes: [{ label: 'ALL POSITIONS', val: 'All' }, { label: 'QUARTERBACKS', val: 'Quarterback' }, { label: 'WIDE RECEIVERS', val: 'Wide Receiver' }, { label: 'RUNNING BACKS', val: 'Running Back' }, { label: 'DEFENSE', val: 'Defense' }] }
+];
+
+const fmt = ms => {
+  const s = Math.floor(ms / 1000);
+  const c = Math.floor((ms % 1000) / 100);
+  return `${s}.${c}s`;
+};
+
+const matchPosition = (playerPos, modeVal) => {
+  if (!playerPos) return false;
+  const p = playerPos.toLowerCase();
+  const f = modeVal.toLowerCase();
+  if (f === 'all') return true;
+  if (f === 'forward') return p.includes('forward') || p.includes('wing') || p.includes('striker') || p.includes('attack');
+  if (f === 'midfield') return p.includes('midfield') || p.includes('wing');
+  if (f === 'defend') return p.includes('defend') || p.includes('back');
+  if (f === 'goalkeeper') return p.includes('goalkeeper') || p.includes('keeper');
+  if (f === 'guard') return p.includes('guard');
+  if (f === 'center') return p.includes('center');
+  if (f === 'quarterback') return p.includes('quarterback') || p.includes('qb');
+  if (f === 'running back') return p.includes('running back') || p.includes('rb');
+  if (f === 'wide receiver') return p.includes('wide receiver') || p.includes('wr');
+  if (f === 'defense') return p.includes('defens') || p.includes('linebacker') || p.includes('corner') || p.includes('safety') || p.includes('lb') || p.includes('cb') || p.includes('de') || p.includes('dt');
+  return p.includes(f);
+};
+
+export default function App() {
+  const [phase, setPhase] = useState('menu'); 
+  const [navStack, setNavStack] = useState(['domain']); 
+  const [selection, setSelection] = useState({ domain: null, sport: null, league: null, team: null, mode: null, movieCat: null });
+  const [leagues, setLeagues] = useState([]);
+  const [teams, setTeams] = useState([]);
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const [slots, setSlots] = useState(Array(10).fill(null));
+  const [queue, setQueue] = useState([]);
+  const [cur, setCur] = useState(null);
+  const [rolling, setRolling] = useState(false);
+  const [ms, setMs] = useState(0);
+  const [flashSlot, setFlashSlot] = useState(null);
+  const [challengeTitle, setChallengeTitle] = useState("BLIND RANK");
+
+  // ── Tracking & Recording State ──
+  const [cardPos, setCardPos] = useState({ x: 50, y: 25, rotation: 0, scale: 1 });
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [recordStatus, setRecordStatus] = useState('idle');
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const tickRef = useRef(null);
+  const landmarkerRef = useRef(null);
+  const prevPos = useRef({ x: 50, y: 25, rotation: 0 });
+  const isRecordingRef = useRef(false);
+
+  // ── 1. Initialization & Media ──
+  useEffect(() => {
+    let active = true;
+    
+    async function startMedia() {
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 }, audio: false });
+          if (active && videoRef.current) videoRef.current.srcObject = stream;
+        }
+      } catch (err) { console.warn("Camera denied."); }
+
+      try {
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+        script.async = true;
+        document.head.appendChild(script);
+        script.onload = async () => {
+          try {
+            const vision = window.tasksVision;
+            if (!vision) return;
+            const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+            landmarkerRef.current = await vision.FaceLandmarker.createFromOptions(resolver, {
+              baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
+              runningMode: "VIDEO", numFaces: 1
+            });
+            if (active) requestAnimationFrame(predictLoop);
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
+
+    const drawCanvasRecord = () => {
+       if (!isRecordingRef.current || !canvasRef.current || !videoRef.current) return;
+       const cvs = canvasRef.current;
+       const video = videoRef.current;
+       if (video.videoWidth === 0) return;
+
+       if (cvs.width !== video.videoWidth) {
+          cvs.width = video.videoWidth;
+          cvs.height = video.videoHeight;
+       }
+
+       const ctx = cvs.getContext('2d');
+       const w = cvs.width;
+       const h = cvs.height;
+
+       ctx.save();
+       ctx.translate(w, 0);
+       ctx.scale(-1, 1);
+       ctx.drawImage(video, 0, 0, w, h);
+       ctx.restore();
+
+       slots.forEach((p, i) => {
+          const slotY = h * 0.15 + (i * (h * 0.085)); 
+          ctx.fillStyle = p ? 'rgba(152,255,212,0.6)' : 'rgba(0,0,0,0.6)';
+          if (selection.domain === 'movies' && p) ctx.fillStyle = 'rgba(255,212,152,0.6)';
+          ctx.beginPath();
+          ctx.roundRect(20, slotY, 70, h * 0.07, 10);
+          ctx.fill();
+
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 24px sans-serif';
+          ctx.fillText(i + 1, 35, slotY + (h * 0.045));
+
+          if (p && p.img) {
+             try {
+               const imgEl = document.getElementById(`slot-img-${i}`);
+               if (imgEl) ctx.drawImage(imgEl, 70, slotY + 5, h * 0.055, h * 0.055);
+             } catch(e) {}
+          }
+       });
+
+       if (cur && faceDetected) {
+           const cx = (cardPos.x / 100) * w;
+           const cy = (cardPos.y / 100) * h;
+           const scale = cardPos.scale * 1.5;
+           const boxW = 120 * scale;
+           const boxH = 120 * scale;
+
+           ctx.save();
+           ctx.translate(cx, cy);
+           ctx.rotate((cardPos.rotation * Math.PI) / 180);
+           ctx.translate(-boxW/2, -boxH - (h * 0.05));
+
+           ctx.fillStyle = selection.domain === 'movies' ? '#FFD498' : '#98FFD4';
+           ctx.beginPath();
+           ctx.roundRect(0, 0, boxW, boxH, 15);
+           ctx.fill();
+
+           if (cur.img) {
+             try {
+               const imgEl = document.getElementById('floating-card-img');
+               if(imgEl) ctx.drawImage(imgEl, 10, 10, boxW - 20, boxH - 20);
+             } catch(e) {}
+           }
+           
+           ctx.fillStyle = selection.domain === 'movies' ? '#FFD498' : '#98FFD4';
+           ctx.beginPath();
+           ctx.roundRect(-20, boxH + 15, boxW + 40, 40, 8);
+           ctx.fill();
+
+           ctx.fillStyle = 'black';
+           ctx.font = 'bold 22px sans-serif';
+           ctx.textAlign = 'center';
+           ctx.fillText(cur.name.substring(0, 18), boxW/2, boxH + 42);
+           ctx.restore();
+       }
+    };
+
+    const predictLoop = () => {
+      if (!active) return;
+      if (videoRef.current && landmarkerRef.current) {
+        try {
+          const results = landmarkerRef.current.detectForVideo(videoRef.current, performance.now());
+          if (results.faceLandmarks?.[0]) {
+            setFaceDetected(true);
+            const l = results.faceLandmarks[0];
+            const forehead = l[151], le = l[33], re = l[263];
+            const angle = Math.atan2(re.y - le.y, re.x - le.x) * (180 / Math.PI);
+            const fw = Math.sqrt(Math.pow(re.x - le.x, 2) + Math.pow(re.y - le.y, 2));
+            const tx = (1 - forehead.x) * 100, ty = forehead.y * 100;
+            const lerp = (s, e, a) => s + (e - s) * a;
+            const nx = lerp(prevPos.current.x, tx, 0.22), ny = lerp(prevPos.current.y, ty, 0.22), nr = lerp(prevPos.current.rotation, angle, 0.22);
+            prevPos.current = { x: nx, y: ny, rotation: nr };
+            setCardPos({ x: nx, y: ny, rotation: nr, scale: Math.max(0.7, fw * 7.5) });
+          } else { setFaceDetected(false); }
+        } catch (e) {}
+      }
+      if (isRecordingRef.current) drawCanvasRecord();
+      requestAnimationFrame(predictLoop);
+    };
+
+    startMedia();
+    return () => { active = false; clearInterval(tickRef.current); };
+  }, [selection.domain, cur, slots]);
+
+  // ── Video Recording ──
+  const toggleRecord = () => {
+    if (recordStatus === 'idle') {
+      chunksRef.current = [];
+      const stream = canvasRef.current.captureStream(30);
+      let options = { mimeType: 'video/webm; codecs=vp9' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: 'video/webm' };
+      
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
+      mediaRecorderRef.current.ondataavailable = e => {
+         if(e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorderRef.current.onstop = () => {
+         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.style.display = 'none';
+         a.href = url;
+         a.download = `BlindRank_Filter_${Date.now()}.webm`;
+         document.body.appendChild(a);
+         a.click();
+         setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      };
+      mediaRecorderRef.current.start();
+      isRecordingRef.current = true;
+      setRecordStatus('recording');
+    } else {
+      mediaRecorderRef.current.stop();
+      isRecordingRef.current = false;
+      setRecordStatus('idle');
+    }
+  };
+
+  // ── Network Fetchers ──
+  const fetchSportsDB = async (endpoint) => {
+    try {
+      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/${endpoint}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) { return null; }
+  };
+
+  const fetchTMDB = async (endpoint, page = 1) => {
+    try {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      const res = await fetch(`https://api.themoviedb.org/3${endpoint}${sep}api_key=${TMDB_KEY}&language=en-US&page=${page}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) { return null; }
+  };
+
+  // ── Navigation Methods ──
+  const pickDomain = (domain) => {
+    setSelection({ domain, sport: null, league: null, team: null, mode: null, movieCat: null });
+    setNavStack(domain === 'sports' ? ['sports'] : ['movies']);
+  };
+
+  const selectSport = async (sport) => {
+    // 1. Legends instantly go to modes
+    if (sport.id === 'Legends') {
+      setSelection(p => ({ ...p, sport, league: null, team: null }));
+      setNavStack(['sports', 'modes']);
+      return;
+    }
+
+    // 2. Direct Leagues (NBA, NFL, F1) completely bypass the Leagues screen
+    if (sport.directLeague) {
+      setLoading(true);
+      const data = await fetchSportsDB(`search_all_teams.php?l=${encodeURIComponent(sport.directLeague)}`);
+      if (data?.teams) {
+        setTeams(data.teams);
+        setSelection(p => ({ ...p, sport, league: { strLeague: sport.directLeague }, team: null }));
+        setNavStack(['sports', 'teams']);
+      } else { 
+        setError(`Could not load ${sport.name} teams. Try again later.`); 
+      }
+      setLoading(false);
+      return;
+    }
+
+    // 3. Soccer gets top curated leagues instantly to avoid API truncating limits
+    setLeagues([
+      { idLeague: '4328', strLeague: 'English Premier League' },
+      { idLeague: '4335', strLeague: 'Spanish La Liga' },
+      { idLeague: '4331', strLeague: 'German Bundesliga' },
+      { idLeague: '4332', strLeague: 'Italian Serie A' },
+      { idLeague: '4334', strLeague: 'French Ligue 1' },
+      { idLeague: '4346', strLeague: 'American Major League Soccer' },
+      { idLeague: '4337', strLeague: 'Dutch Eredivisie' },
+      { idLeague: '4330', strLeague: 'Scottish Premiership' }
+    ]);
+    setSelection(p => ({ ...p, sport, league: null, team: null }));
+    setNavStack(['sports', 'leagues']);
+  };
+
+  const selectLeague = async (league) => {
+    setLoading(true);
+    const data = await fetchSportsDB(`search_all_teams.php?l=${encodeURIComponent(league.strLeague)}`);
+    if (data?.teams) {
+      setTeams(data.teams);
+      setSelection(p => ({ ...p, league }));
+      setNavStack(['sports', 'leagues', 'teams']);
+    } else { setError("Could not load teams."); }
+    setLoading(false);
+  };
+
+  const selectTeam = (team) => {
+    setSelection(p => ({ ...p, team }));
+    // If it's a direct league sport, the stack is ['sports', 'teams', 'modes']
+    const newStack = [...navStack, 'modes'];
+    setNavStack(newStack);
+  };
+
+  // ── Smart Engine: Dynamic Fallbacks ──
+  const startSportsChallenge = async (mode) => {
+    setLoading(true);
+    setError(null);
+    setSelection(p => ({ ...p, mode }));
+    let finalPool = [];
+    const targetSport = selection.sport.filterSport;
+
+    try {
+      let rawPlayers = [];
+
+      if (selection.sport.id === 'Legends') {
+        const shuffled = [...LEGENDS_DATA].sort(() => Math.random() - 0.5).slice(0, 25);
+        const results = await Promise.all(shuffled.map(n => fetchSportsDB(`searchplayers.php?p=${encodeURIComponent(n)}`)));
+        rawPlayers = results.flatMap(r => r?.player || []);
+      } else if (selection.team) {
+        const d = await fetchSportsDB(`lookup_all_players.php?id=${selection.team.idTeam}`);
+        rawPlayers = d?.player || [];
+      } else {
+        const teamsSample = [...teams].sort(() => Math.random() - 0.5).slice(0, 10);
+        const rosters = await Promise.all(teamsSample.map(t => fetchSportsDB(`lookup_all_players.php?id=${t.idTeam}`)));
+        rawPlayers = rosters.flatMap(r => r?.player || []);
+      }
+
+      const cleanPlayers = rawPlayers.filter(p => {
+         if (!p || !p.strPlayer) return false;
+         if (targetSport === 'Motorsport') return true; // Fix for F1 missing sports tags
+         if (p.strSport) return p.strSport.toLowerCase() === targetSport.toLowerCase();
+         return !!selection.team;
+      });
+
+      finalPool = cleanPlayers
+        .map(p => ({ id: p.idPlayer || Math.random(), name: p.strPlayer, img: p.strCutout || p.strRender || p.strThumb, pos: p.strPosition }))
+        .filter(p => matchPosition(p.pos, mode.val) && p.img);
+
+      const unique = Array.from(new Map(finalPool.map(item => [item.name, item])).values());
+      
+      if (unique.length < 10) {
+        setError(`Not enough players found for this specific position on this team. Try 'ALL POSITIONS' or select the whole League!`);
+        setLoading(false); return;
+      }
+
+      setChallengeTitle(selection.sport.id === 'Legends' ? 'FOOTBALL LEGENDS' : (selection.team?.strTeam || selection.league?.strLeague || 'SPORTS'));
+      launchGame(unique);
+    } catch (e) { setError("Error syncing with database."); }
+    setLoading(false);
+  };
+
+  const startMovieChallenge = async (cat) => {
+    setLoading(true);
+    setError(null);
+    setSelection(p => ({ ...p, movieCat: cat }));
+
+    try {
+      const randomPage1 = Math.floor(Math.random() * 5) + 1;
+      let randomPage2 = Math.floor(Math.random() * 5) + 1;
+      if (randomPage1 === randomPage2) randomPage2 = (randomPage2 % 5) + 1;
+
+      const results = await Promise.all([
+        fetchTMDB(cat.endpoint, randomPage1),
+        fetchTMDB(cat.endpoint, randomPage2)
+      ]);
+      
+      const allMovies = results.flatMap(r => r?.results || []);
+      const finalPool = allMovies
+        .filter(m => m.poster_path && m.title)
+        .filter(m => {
+          if (cat.id === 'animation') return true;
+          return m.genre_ids && !m.genre_ids.includes(16);
+        })
+        .map(m => ({
+          id: m.id,
+          name: m.title,
+          img: `https://image.tmdb.org/t/p/w500${m.poster_path}`
+        }));
+
+      const unique = Array.from(new Map(finalPool.map(item => [item.id, item])).values());
+      if (unique.length < 10) {
+        setError("Not enough English movies found for this category.");
+        setLoading(false); return;
+      }
+      setChallengeTitle(cat.name);
+      launchGame(unique);
+    } catch (e) { setError("Error syncing with TMDB."); }
+    setLoading(false);
+  };
+
+  // ── Core Game Loop ──
+  const launchGame = (pool) => {
+    const session = pool.sort(() => Math.random() - 0.5).slice(0, 10);
+    setSlots(Array(10).fill(null));
+    setQueue(session);
+    setPhase('playing');
+    const startMs = Date.now();
+    tickRef.current = setInterval(() => setMs(Date.now() - startMs), 100);
+    doRoll(session);
+  };
+
+  const doRoll = useCallback((pool) => {
+    if (!pool.length) return;
+    setRolling(true);
+    let ticks = 0;
+    const iv = setInterval(() => {
+      const flicker = pool[Math.floor(Math.random() * pool.length)];
+      setCur({ ...flicker, isRolling: true });
+      if (++ticks >= 15) {
+        clearInterval(iv);
+        setCur(pool[0]);
+        setRolling(false);
+      }
+    }, 60);
+  }, []);
+
+  const place = (i) => {
+    if (slots[i] || !cur || rolling) return;
+    const n = [...slots]; n[i] = cur;
+    setSlots(n); setFlashSlot(i);
+    setTimeout(() => setFlashSlot(null), 300);
+    const nq = queue.slice(1); setQueue(nq);
+    if (nq.length === 0) {
+      clearInterval(tickRef.current);
+      setTimeout(() => {
+        setPhase('result');
+        if(isRecordingRef.current) toggleRecord();
+      }, 600);
+    } else { doRoll(nq); }
+  };
+
+  const back = () => {
+    setError(null);
+    if (navStack.length > 1) {
+       // Smart routing for direct leagues
+       if (navStack[navStack.length - 1] === 'teams' && selection.sport?.directLeague) {
+         setNavStack(['sports']);
+       } else {
+         setNavStack(p => p.slice(0, -1));
+       }
+    }
+    else setNavStack(['domain']);
+  };
+
+  const currentNav = navStack[navStack.length - 1];
+
+  return (
+    <div className="relative w-full h-[100dvh] bg-[#050505] overflow-hidden font-sans select-none text-white antialiased">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@800&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+        .syne { font-family: 'Syne', sans-serif; }
+        .pjs { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass { background: rgba(0,0,0,0.65); backdrop-filter: blur(25px); border: 1px solid rgba(255,255,255,0.08); }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        @keyframes scan { 0%{top:0%} 100%{top:100%} }
+        .animate-scan { animation: scan 1.2s linear infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
+        .anim-pop { animation: pop 0.3s ease-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
+
+      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover scale-x-[-1] z-0 opacity-80" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-0" />
+      
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* ── Top HUD with Record Button ── */}
+      {phase !== 'menu' && (
+        <div className="absolute top-10 inset-x-8 flex justify-between items-start z-50 pointer-events-auto">
+          <button onClick={toggleRecord} className={`px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xl transition-all active:scale-90 ${recordStatus === 'recording' ? 'bg-[#FF3D5A] border border-[#FF3D5A] animate-pulse' : 'glass'}`}>
+            {recordStatus === 'recording' ? <Square size={14} fill="white" className="text-white" /> : <Circle size={14} fill="#FF3D5A" className="text-[#FF3D5A]" />}
+            <span className="syne text-[11px] font-extrabold tracking-widest uppercase text-white">{recordStatus === 'recording' ? 'REC' : 'SAVE VIDEO'}</span>
+          </button>
+          <div className={`px-5 py-3 rounded-2xl shadow-xl ${selection.domain === 'movies' ? 'bg-[#FFD498]' : 'bg-[#98FFD4]'}`}>
+            <span className="pjs text-black font-black text-sm tabular-nums tracking-tighter">{fmt(ms)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Menu Drill-Down ── */}
+      {phase === 'menu' && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center px-8 bg-black/60 backdrop-blur-2xl">
+          <div className="w-full max-w-sm flex flex-col h-[85dvh]">
+            <div className="flex items-center justify-between mb-8 shrink-0">
+              {currentNav !== 'domain' ? (
+                <button onClick={back} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center active:scale-90 transition-transform">
+                  <ArrowLeft size={20} />
+                </button>
+              ) : <div className="w-12" />}
+              <h1 className={`syne text-2xl font-extrabold italic tracking-tighter uppercase ${currentNav === 'movies' ? 'text-[#FFD498]' : 'text-[#98FFD4]'}`}>
+                {currentNav === 'domain' ? 'SELECT CATEGORY' : (currentNav === 'modes' ? 'CHALLENGE MODES' : currentNav)}
+              </h1>
+              <div className="w-12" />
+            </div>
+
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-start gap-3 text-red-100 anim-pop">
+                <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                <span className="text-[11px] font-bold leading-tight">{error}</span>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 pb-10">
+              {loading ? (
+                <div className="h-64 flex flex-col items-center justify-center gap-5">
+                  <Loader2 className={`animate-spin ${selection.domain === 'movies' ? 'text-[#FFD498]' : 'text-[#98FFD4]'}`} size={40} />
+                  <span className="pjs text-[10px] font-black uppercase tracking-[0.4em] opacity-40">Syncing Database</span>
+                </div>
+              ) : (
+                <>
+                  {/* DOMAIN SELECTION */}
+                  {currentNav === 'domain' && (
+                    <div className="flex flex-col gap-4 mt-10">
+                      <button onClick={() => pickDomain('sports')} className="w-full flex flex-col items-center justify-center glass py-12 rounded-[2.5rem] active:scale-95 transition-all border-[#98FFD4]/20 hover:border-[#98FFD4]/50">
+                        <Trophy size={48} className="text-[#98FFD4] mb-4" />
+                        <span className="syne font-extrabold text-xl tracking-[0.3em]">SPORTS</span>
+                        <span className="pjs text-[10px] text-white/40 mt-2 font-bold tracking-widest">SOCCER, NBA, F1, NFL</span>
+                      </button>
+                      <button onClick={() => pickDomain('movies')} className="w-full flex flex-col items-center justify-center glass py-12 rounded-[2.5rem] active:scale-95 transition-all border-[#FFD498]/20 hover:border-[#FFD498]/50 mt-2">
+                        <Popcorn size={48} className="text-[#FFD498] mb-4" />
+                        <span className="syne font-extrabold text-xl tracking-[0.3em] text-[#FFD498]">MOVIES</span>
+                        <span className="pjs text-[10px] text-white/40 mt-2 font-bold tracking-widest">POWERED BY TMDB</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* MOVIES CATEGORIES */}
+                  {currentNav === 'movies' && MOVIE_CATS.map(c => (
+                    <button key={c.id} onClick={() => startMovieChallenge(c)} className="w-full flex items-center justify-between glass p-6 rounded-[2rem] active:scale-95 transition-all border-[#FFD498]/10 hover:border-[#FFD498]/30">
+                      <div className="flex items-center gap-5">
+                        <span className="text-3xl">{c.icon}</span>
+                        <span className="syne font-extrabold text-[13px] tracking-[0.15em] text-white">{c.name}</span>
+                      </div>
+                      <ChevronRight size={16} className="text-[#FFD498]" />
+                    </button>
+                  ))}
+
+                  {/* SPORTS CATEGORIES */}
+                  {currentNav === 'sports' && SPORTS.map(s => (
+                    <button key={s.id} onClick={() => selectSport(s)} className={`w-full flex items-center justify-between glass p-6 rounded-[2.2rem] active:scale-95 transition-all ${s.id === 'Legends' ? 'border-[#98FFD4]/40 border-[1.5px]' : ''}`}>
+                      <div className="flex items-center gap-5">
+                        <span className="text-3xl">{s.icon}</span>
+                        <div className="flex flex-col items-start text-left">
+                          <span className="syne font-extrabold text-[13px] tracking-[0.2em]">{s.name}</span>
+                          {s.id === 'Legends' && <span className="text-[9px] font-bold text-[#98FFD4] tracking-[0.1em]">250+ ICONS</span>}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-[#98FFD4]" />
+                    </button>
+                  ))}
+
+                  {currentNav === 'leagues' && leagues.map(l => (
+                    <button key={l.idLeague} onClick={() => selectLeague(l)} className="w-full flex items-center justify-between glass p-5 rounded-3xl active:scale-95 transition-all text-left">
+                      <span className="syne font-extrabold text-[10px] tracking-[0.1em] uppercase truncate pr-4">{l.strLeague}</span>
+                      <ChevronRight size={14} className="text-[#98FFD4]" />
+                    </button>
+                  ))}
+
+                  {currentNav === 'teams' && (
+                    <>
+                      <button onClick={() => selectTeam(null)} className="w-full bg-[#98FFD4] p-6 rounded-3xl active:scale-95 transition-all mb-4 text-black flex items-center justify-center gap-3 shadow-lg">
+                        <Users size={20} />
+                        <span className="syne font-black text-xs tracking-[0.2em]">ALL LEAGUE STARS</span>
+                      </button>
+                      <div className="grid grid-cols-1 gap-2">
+                        {teams.map(t => (
+                          <button key={t.idTeam} onClick={() => selectTeam(t)} className="w-full flex items-center gap-5 glass p-4 rounded-3xl active:scale-95 transition-all text-left">
+                            <img src={t.strTeamBadge} className="w-10 h-10 object-contain shrink-0" alt="" />
+                            <span className="syne font-extrabold text-[11px] tracking-widest uppercase truncate">{t.strTeam}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {currentNav === 'modes' && (
+                    <>
+                      <div className="mb-6 p-4 rounded-3xl border border-white/10 bg-white/5 text-center">
+                         <span className="syne text-[10px] text-[#98FFD4] font-bold tracking-[0.3em] uppercase block mb-1">Target Roster</span>
+                         <span className="syne text-sm font-extrabold tracking-widest uppercase truncate block">
+                           {selection.team ? selection.team.strTeam : (selection.league ? selection.league.strLeague : selection.sport.name)}
+                         </span>
+                      </div>
+                      {selection.sport.modes.map((m, i) => (
+                        <button key={m.val} onClick={() => startSportsChallenge(m)} className={`w-full flex justify-between items-center p-5 rounded-[1.8rem] active:scale-95 transition-all mb-3 ${i === 0 ? 'bg-[#98FFD4] text-black shadow-xl' : 'glass'}`}>
+                          <span className={`syne font-extrabold text-[12px] tracking-widest uppercase ${i === 0 ? '' : 'opacity-80'}`}>{m.label}</span>
+                          {i === 0 ? <Users size={16} /> : <Filter size={16} className="opacity-40" />}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PERFECT FOREHEAD TRACKING CARD ── */}
+      {phase === 'playing' && cur && (
+        <div className="absolute z-40 transition-all duration-75 pointer-events-none origin-bottom" style={{
+          left: `${cardPos.x}%`, top: `${cardPos.y}%`, 
+          transform: `translate(-50%, -100%) rotate(${cardPos.rotation}deg) scale(${cardPos.scale})`,
+          marginTop: '-4%', 
+          opacity: (faceDetected || !landmarkerRef.current) ? 1 : 0.4
+        }}>
+          <div className="flex flex-col items-center animate-float pb-4">
+             <div className="relative">
+                <div className={`absolute -inset-3 blur-3xl rounded-full opacity-50 ${selection.domain === 'movies' ? 'bg-[#FFD498]/30' : 'bg-[#98FFD4]/20'}`} />
+                <div className={`relative w-40 h-40 rounded-[2.8rem] flex items-center justify-center overflow-hidden border-[6px] shadow-2xl ${selection.domain === 'movies' ? 'bg-[#FFD498] border-[#FFD498]' : 'bg-[#98FFD4] border-[#98FFD4]'}`}>
+                    <div className={`w-full h-full transition-all duration-150 ${rolling ? 'blur-md grayscale scale-90 opacity-50' : 'opacity-100 scale-100'}`}>
+                        {cur.img ? (
+                          <img id="floating-card-img" src={cur.img} crossOrigin="anonymous" className="w-full h-full object-cover" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                        ) : null}
+                        <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center" style={{ display: cur.img ? 'none' : 'flex' }}>
+                          {selection.domain === 'movies' ? <Popcorn size={56} className="text-zinc-700 mb-2" /> : <User size={56} className="text-zinc-700 mb-2" />}
+                        </div>
+                    </div>
+                    {rolling && <div className={`absolute inset-0 animate-scan ${selection.domain === 'movies' ? 'bg-[#FFD498]/20' : 'bg-[#98FFD4]/15'}`} />}
+                </div>
+             </div>
+             <div className={`mt-5 w-[110%] px-4 py-2.5 rounded-2xl shadow-2xl transition-all duration-300 flex items-center justify-center ${selection.domain === 'movies' ? 'bg-[#FFD498]' : 'bg-[#98FFD4]'} ${rolling ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+                <span className={`syne text-black font-black uppercase tracking-wider text-center line-clamp-2 leading-tight ${selection.domain === 'movies' ? 'text-[11px]' : 'text-[13px]'}`}>
+                  {cur.name}
+                </span>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ranking Sidebar ── */}
+      {phase === 'playing' && (
+        <div className="absolute left-6 top-[15%] bottom-[12%] w-16 flex flex-col justify-between z-20">
+          {slots.map((p, i) => (
+            <button key={i} onClick={() => place(i)} disabled={!!p || rolling}
+              className={`relative flex items-center gap-2 h-[8.5%] px-1 rounded-2xl border transition-all duration-300
+                ${p ? (selection.domain === 'movies' ? 'bg-[#FFD498]/30 border-[#FFD498]/50 shadow-[#FFD498]/10' : 'bg-[#98FFD4]/30 border-[#98FFD4]/50 shadow-[#98FFD4]/10') + ' shadow-lg opacity-100' : 'glass opacity-60 active:scale-90 border-transparent'}
+                ${flashSlot === i ? 'anim-pop' : ''}`}>
+              <span className="syne text-[15px] font-black italic text-white/20 w-4 text-center shrink-0">{i + 1}</span>
+              <div className="flex-1 h-full py-2">
+                {p ? (
+                  <div className="w-full h-full rounded-xl overflow-hidden border border-white/20 bg-black/40 relative">
+                    {p.img && <img id={`slot-img-${i}`} src={p.img} crossOrigin="anonymous" className="w-full h-full object-cover" alt=""/>}
+                  </div>
+                ) : <div className="w-full h-full flex items-center justify-center opacity-10"><div className="w-1.5 h-1.5 rounded-full bg-white shadow-lg" /></div>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Final Result Board ── */}
+      {phase === 'result' && (
+        <div className="absolute inset-0 z-[60] bg-[#050505]/98 backdrop-blur-3xl flex flex-col px-8 sm:px-10 py-16 overflow-y-auto no-scrollbar">
+          <div className="flex justify-between items-end mb-10 text-left shrink-0">
+            <div className="min-w-0 pr-4">
+              <p className={`pjs font-black text-[11px] tracking-[0.4em] mb-2 uppercase opacity-60 ${selection.domain === 'movies' ? 'text-[#FFD498]' : 'text-[#98FFD4]'}`}>Session Complete</p>
+              <h2 className="syne text-3xl font-extrabold italic leading-none truncate text-white uppercase block">
+                {challengeTitle}
+              </h2>
+            </div>
+            <button onClick={() => { setNavStack(['domain']); setPhase('menu'); }} className="p-4 sm:p-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-white active:scale-90 transition-transform shadow-2xl shrink-0">
+              <RefreshCw size={24} />
+            </button>
+          </div>
+          <div className="space-y-2 mb-16 flex-1">
+            {slots.map((p, i) => (
+              <div key={i} className={`flex items-center gap-4 sm:gap-6 p-4 rounded-[1.5rem] border transition-all ${i === 0 ? (selection.domain === 'movies' ? 'bg-[#FFD498] border-[#FFD498]' : 'bg-[#98FFD4] border-[#98FFD4]') + ' text-black shadow-2xl scale-[1.02]' : 'glass border-white/10'}`}>
+                <span className="syne w-6 sm:w-8 font-extrabold text-xl sm:text-2xl italic opacity-30 text-center shrink-0">{i + 1}</span>
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden border border-white/20 flex-shrink-0 bg-black/40">
+                  {p?.img && <img src={p.img} className="w-full h-full object-cover" alt=""/>}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <p className="syne font-extrabold text-[13px] sm:text-[15px] uppercase truncate tracking-tight text-left block w-full">{p?.name}</p>
+                </div>
+                {i === 0 && <Star size={18} fill="black" className="ml-2 shrink-0" />}
+              </div>
+            ))}
+          </div>
+          <div className="shrink-0">
+            <button onClick={() => {
+              const text = `🏆 My Blind Rank: ${challengeTitle}\n${slots.map((p, i) => `${i + 1}. ${p?.name}`).join('\n')}`;
+              if (navigator.share) navigator.share({ title: 'Blind Rank', text });
+            }} className={`w-full py-6 rounded-[2rem] text-black syne font-extrabold text-lg flex items-center justify-center gap-4 active:scale-95 ${selection.domain === 'movies' ? 'bg-[#FFD498] shadow-[0_20px_50px_rgba(255,212,152,0.3)]' : 'bg-[#98FFD4] shadow-[0_20px_50px_rgba(152,255,212,0.3)]'}`}>
+              <Share2 size={24} /> SHARE RANKING
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ── */}
+      <div className="absolute bottom-10 inset-x-0 flex justify-center z-30 pointer-events-none">
+        <div className="glass px-10 py-5 rounded-[2.5rem] flex items-center gap-6 shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-white/5">
+          <span className="pjs text-[10px] font-black uppercase tracking-[0.5em] text-white/20">BR-PRO ENGINE</span>
+          <div className="w-px h-5 bg-white/10" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-2.5 h-2.5 rounded-full animate-pulse shrink-0 ${selection.domain === 'movies' ? 'bg-[#FFD498] shadow-[0_0_15px_rgba(255,212,152,1)]' : 'bg-[#98FFD4] shadow-[0_0_15px_rgba(152,255,212,1)]'}`} />
+            <span className={`syne text-[11px] font-extrabold uppercase tracking-[0.2em] truncate max-w-[120px] sm:max-w-[150px] block ${selection.domain === 'movies' ? 'text-[#FFD498]' : 'text-[#98FFD4]'}`}>
+              {challengeTitle === 'BLIND RANK' ? 'SYSTEM READY' : challengeTitle}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+```
