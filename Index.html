@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Blind Rank Pro Ultra</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Ultra-Stable Face API -->
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;700;800;900&display=swap');
+        
+        body { margin: 0; padding: 0; background-color: #030305; color: white; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+        .display-font { font-family: 'Outfit', sans-serif; }
+        .body-font { font-family: 'Inter', sans-serif; }
+        
+        /* Ultra-Premium Glass Effects */
+        .glass-ultra { background: rgba(15, 15, 20, 0.4); backdrop-filter: blur(30px) saturate(150%); -webkit-backdrop-filter: blur(30px) saturate(150%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); }
+        .glass-card { background: linear-gradient(145deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%); backdrop-filter: blur(40px) saturate(200%); -webkit-backdrop-filter: blur(40px) saturate(200%); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); }
+        .glass-panel { background: rgba(3, 3, 5, 0.85); backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px); }
+        
+        /* Dynamic Ambient Backgrounds */
+        .ambient-sports { background: radial-gradient(circle at 0% 0%, rgba(0, 212, 255, 0.25) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(0, 110, 255, 0.25) 0%, transparent 50%); }
+        .ambient-movies { background: radial-gradient(circle at 0% 0%, rgba(255, 184, 0, 0.25) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(255, 61, 90, 0.25) 0%, transparent 50%); }
+        .ambient-tv { background: radial-gradient(circle at 0% 0%, rgba(184, 41, 255, 0.25) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(90, 0, 255, 0.25) 0%, transparent 50%); }
+        .ambient-music { background: radial-gradient(circle at 0% 0%, rgba(255, 0, 128, 0.25) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(255, 184, 0, 0.25) 0%, transparent 50%); }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .pt-safe { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        .pb-safe { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+
+        @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.05)} 100%{transform:scale(1)} }
+        .anim-pop { animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        .stagger-1 { animation-delay: 30ms; } .stagger-2 { animation-delay: 60ms; } .stagger-3 { animation-delay: 90ms; } .stagger-4 { animation-delay: 120ms; } .stagger-5 { animation-delay: 150ms; } .stagger-6 { animation-delay: 180ms; } .stagger-7 { animation-delay: 210ms; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        const Icon = ({ path, size = 24, className = "", fill="none" }) => ( <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html: path}} /> );
+        const RefreshCw = (p) => <Icon {...p} path='<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'/>;
+        const Share2 = (p) => <Icon {...p} path='<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>'/>;
+        const UserIcon = (p) => <Icon {...p} path='<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'/>;
+        const SquareIcon = (p) => <Icon {...p} path='<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>'/>;
+        const TrophyIcon = (p) => <Icon {...p} path='<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>'/>;
+        const Loader2 = (p) => <Icon {...p} path='<path d="M21 12a9 9 0 1 1-6.219-8.56"/>'/>;
+        const ChevronRight = (p) => <Icon {...p} path='<path d="m9 18 6-6-6-6"/>'/>;
+        const ArrowLeft = (p) => <Icon {...p} path='<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'/>;
+        const StarIcon = (p) => <Icon {...p} path='<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'/>;
+        const AlertCircle = (p) => <Icon {...p} path='<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'/>;
+        const PopcornIcon = (p) => <Icon {...p} path='<path d="M4 11h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9Z"/><path d="M4 11V8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5V11"/><path d="M8.5 6V4.5A2.5 2.5 0 0 1 11 2h2a2.5 2.5 0 0 1 2.5 2.5V6"/><path d="M12 11v10"/><path d="M8 11v10"/><path d="M16 11v10"/>'/>;
+        const DownloadIcon = (p) => <Icon {...p} path='<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'/>;
+        const TvIcon = (p) => <Icon {...p} path='<rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/>'/>;
+        const MicIcon = (p) => <Icon {...p} path='<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>'/>;
+        const PlayIcon = (p) => <Icon {...p} path='<polygon points="5 3 19 12 5 21 5 3"/>'/>;
+        const MusicIcon = (p) => <Icon {...p} path='<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'/>;
+
+        const TMDB_KEY = '3ea9e43d0b879725ac8fda707021e858';
+        const THEME = { 
+            movies: { primary: '#FFB800', secondary: '#FF3D5A', bg: 'ambient-movies', shadow: 'rgba(255, 184, 0, 0.4)' }, 
+            tv: { primary: '#D946EF', secondary: '#7C3AED', bg: 'ambient-tv', shadow: 'rgba(217, 70, 239, 0.4)' },
+            sports: { primary: '#00E5FF', secondary: '#0066FF', bg: 'ambient-sports', shadow: 'rgba(0, 212, 255, 0.4)' }, 
+            music: { primary: '#FF0080', secondary: '#FFB800', bg: 'ambient-music', shadow: 'rgba(255, 0, 128, 0.4)' }
+        };
+
+        const ACTORS_DATA = [ "Adam Sandler", "Al Pacino", "Angelina Jolie", "Anthony Hopkins", "Brad Pitt", "Cate Blanchett", "Christian Bale", "Cillian Murphy", "Denzel Washington", "Emma Stone", "Harrison Ford", "Heath Ledger", "Jim Carrey", "Joaquin Phoenix", "Johnny Depp", "Julia Roberts", "Keanu Reeves", "Leonardo DiCaprio", "Margot Robbie", "Meryl Streep", "Morgan Freeman", "Robert De Niro", "Robin Williams", "Ryan Gosling", "Samuel L. Jackson", "Scarlett Johansson", "Tom Cruise", "Tom Hanks", "Will Smith", "Zendaya", "Florence Pugh", "Timothée Chalamet", "Austin Butler", "Ryan Reynolds", "Tom Hardy" ].sort();
+
+        // --- MASSIVE X10 UPGRADE: THE LARGEST DATABASE EVER ---
+        const MENU_DATA = {
+            domain: [
+                { type: 'nav', id: 'movies', name: 'MOVIES', icon: <PopcornIcon size={46} className="text-[#FFB800]" />, desc: 'FRANCHISES, DIRECTORS, DECADES, GENRES' },
+                { type: 'nav', id: 'tv', name: 'TV SHOWS', icon: <TvIcon size={46} className="text-[#D946EF]" />, desc: 'NETWORKS, REALITY, ANIME, SITCOMS' },
+                { type: 'nav', id: 'sports', name: 'SPORTS', icon: <TrophyIcon size={46} className="text-[#00D4FF]" />, desc: 'TOP FOOTBALL CLUBS, NBA, NFL, UFC' },
+                { type: 'nav', id: 'music', name: 'MUSIC', icon: <MusicIcon size={46} className="text-[#FF0080]" />, desc: 'POP ICONS, RAP LEGENDS, ROCK, R&B' }
+            ],
+
+            // ================= MOVIES DEPTH =================
+            movies: [
+                { type: 'nav', id: 'm_franchises', name: 'EPIC FRANCHISES', icon: '🍿', desc: 'STAR WARS, MARVEL, HARRY POTTER...' },
+                { type: 'nav', id: 'm_genres', name: 'BY GENRE', icon: '🎭', desc: 'SCIFI, HORROR, COMEDY, CRIME...' },
+                { type: 'nav', id: 'm_dirs', name: 'LEGENDARY DIRECTORS', icon: '🎬', desc: 'NOLAN, TARANTINO, SCORSESE...' },
+                { type: 'nav', id: 'm_studios', name: 'STUDIOS', icon: '🏰', desc: 'A24, DISNEY, WB, GHIBLI...' },
+                { type: 'nav', id: 'm_decades', name: 'BY DECADE', icon: '⏳', desc: '70s, 80s, 90s, 00s, 10s...' },
+                { type: 'nav', id: 'm_regional', name: 'INTERNATIONAL', icon: '🌍', desc: 'BRITISH, KOREAN, BOLLYWOOD...' },
+                { type: 'nav', id: 'm_actors', name: 'HOLLYWOOD ICONS', icon: '🌟', desc: 'RANK SPECIFIC ACTOR FILMS' },
+                { type: 'game', id: 'm_pop', name: 'GLOBAL BLOCKBUSTERS', icon: '🔥', endpoint: '/discover/movie?sort_by=popularity.desc&vote_count.gte=2000' },
+            ],
+            m_franchises: [
+                { type: 'game', id: 'fr_mcu', name: 'Marvel Cinematic Universe', icon: '🦸‍♂️', endpoint: '/discover/movie?with_companies=420' },
+                { type: 'game', id: 'fr_sw', name: 'Star Wars Universe', icon: '⚔️', endpoint: '/discover/movie?with_companies=1&with_keywords=11195' },
+                { type: 'game', id: 'fr_hp', name: 'Harry Potter / Wizarding', icon: '⚡', endpoint: '/discover/movie?with_keywords=851' },
+                { type: 'game', id: 'fr_lotr', name: 'Lord of the Rings', icon: '🧝‍♂️', endpoint: '/discover/movie?with_keywords=1190' },
+                { type: 'game', id: 'fr_bond', name: 'James Bond (007)', icon: '🕵️‍♂️', endpoint: '/discover/movie?with_keywords=10620' },
+                { type: 'game', id: 'fr_ff', name: 'Fast & Furious', icon: '🏎️', endpoint: '/discover/movie?with_keywords=1089' },
+                { type: 'game', id: 'fr_dc', name: 'DC Universe & Batman', icon: '🦇', endpoint: '/discover/movie?with_companies=12806,9993,429' },
+            ],
+            m_genres: [
+                { type: 'game', id: 'g_act', name: 'Action & Adventure', icon: '💥', endpoint: '/discover/movie?with_genres=28,12&vote_count.gte=1000' },
+                { type: 'nav', id: 'm_horror', name: 'Horror Sub-Genres', icon: '🔪', desc: 'SLASHERS, ZOMBIES, PARANORMAL' },
+                { type: 'nav', id: 'm_comedy', name: 'Comedy Sub-Genres', icon: '😂', desc: 'ROMCOM, DARK COMEDY, SLAPSTICK' },
+                { type: 'nav', id: 'm_scifi', name: 'Sci-Fi Sub-Genres', icon: '👽', desc: 'CYBERPUNK, SPACE, TIME TRAVEL' },
+                { type: 'game', id: 'g_rom', name: 'Romance', icon: '❤️', endpoint: '/discover/movie?with_genres=10749&vote_count.gte=1000' },
+                { type: 'game', id: 'g_dra', name: 'Prestige Drama', icon: '🍷', endpoint: '/discover/movie?with_genres=18&vote_count.gte=1500' },
+                { type: 'game', id: 'g_cri', name: 'Crime & Mob', icon: '🕴️', endpoint: '/discover/movie?with_genres=80&vote_count.gte=1000' },
+                { type: 'game', id: 'g_fan', name: 'High Fantasy', icon: '🧙‍♂️', endpoint: '/discover/movie?with_genres=14&vote_count.gte=1000' },
+                { type: 'game', id: 'g_west', name: 'Westerns', icon: '🤠', endpoint: '/discover/movie?with_genres=37&vote_count.gte=500' },
+                { type: 'game', id: 'g_war', name: 'War & Military', icon: '🪖', endpoint: '/discover/movie?with_genres=10752&vote_count.gte=500' },
+            ],
+            m_horror: [
+                { type: 'game', id: 'h_all', name: 'All Horror Masters', icon: '🩸', endpoint: '/discover/movie?with_genres=27&vote_count.gte=1000' },
+                { type: 'game', id: 'h_slash', name: 'Slashers', icon: '🔪', endpoint: '/discover/movie?with_genres=27&with_keywords=12335' }, 
+                { type: 'game', id: 'h_para', name: 'Paranormal/Ghost', icon: '🏚️', endpoint: '/discover/movie?with_genres=27&with_keywords=3149,3358' }, 
+                { type: 'game', id: 'h_zomb', name: 'Zombies', icon: '🧟', endpoint: '/discover/movie?with_genres=27&with_keywords=12377' }, 
+                { type: 'game', id: 'h_psych', name: 'Psychological', icon: '🧠', endpoint: '/discover/movie?with_genres=27,53&vote_count.gte=500' }, 
+            ],
+            m_comedy: [
+                { type: 'game', id: 'c_all', name: 'All Comedy', icon: '😂', endpoint: '/discover/movie?with_genres=35&vote_count.gte=1000' },
+                { type: 'game', id: 'c_rom', name: 'Rom-Coms', icon: '💘', endpoint: '/discover/movie?with_genres=35,10749&vote_count.gte=500' },
+                { type: 'game', id: 'c_dark', name: 'Dark Comedy', icon: '😈', endpoint: '/discover/movie?with_genres=35&with_keywords=9748' },
+                { type: 'game', id: 'c_act', name: 'Action Comedy', icon: '🧨', endpoint: '/discover/movie?with_genres=35,28&vote_count.gte=500' },
+            ],
+            m_scifi: [
+                { type: 'game', id: 's_all', name: 'Sci-Fi Epics', icon: '🛸', endpoint: '/discover/movie?with_genres=878&vote_count.gte=1000' },
+                { type: 'game', id: 's_space', name: 'Space Exploration', icon: '🚀', endpoint: '/discover/movie?with_genres=878&with_keywords=3801' },
+                { type: 'game', id: 's_time', name: 'Time Travel', icon: '⏳', endpoint: '/discover/movie?with_genres=878&with_keywords=4379' },
+                { type: 'game', id: 's_cyber', name: 'Cyberpunk & Dystopia', icon: '🤖', endpoint: '/discover/movie?with_genres=878&with_keywords=11100,4565' },
+            ],
+            m_dirs: [
+                { type: 'game', id: 'd_nolan', name: 'Christopher Nolan', icon: '⏳', endpoint: '/discover/movie?with_crew=525' },
+                { type: 'game', id: 'd_taran', name: 'Quentin Tarantino', icon: '🩸', endpoint: '/discover/movie?with_crew=138' },
+                { type: 'game', id: 'd_scors', name: 'Martin Scorsese', icon: '🕴️', endpoint: '/discover/movie?with_crew=224' },
+                { type: 'game', id: 'd_spiel', name: 'Steven Spielberg', icon: '🦖', endpoint: '/discover/movie?with_crew=488' },
+                { type: 'game', id: 'd_kubri', name: 'Stanley Kubrick', icon: '👁️', endpoint: '/discover/movie?with_crew=240' },
+                { type: 'game', id: 'd_finch', name: 'David Fincher', icon: '📦', endpoint: '/discover/movie?with_crew=7467' },
+                { type: 'game', id: 'd_cameron', name: 'James Cameron', icon: '🌊', endpoint: '/discover/movie?with_crew=2710' },
+                { type: 'game', id: 'd_ander', name: 'Wes Anderson', icon: '🎨', endpoint: '/discover/movie?with_crew=5655' },
+                { type: 'game', id: 'd_ville', name: 'Denis Villeneuve', icon: '🏜️', endpoint: '/discover/movie?with_crew=42859' },
+                { type: 'game', id: 'd_scott', name: 'Ridley Scott', icon: '👽', endpoint: '/discover/movie?with_crew=578' },
+            ],
+            m_studios: [
+                { type: 'game', id: 's_a24', name: 'A24 Masterpieces', icon: '✨', endpoint: '/discover/movie?with_companies=3166|41077&vote_count.gte=200' },
+                { type: 'game', id: 's_dis', name: 'Disney Animation', icon: '🏰', endpoint: '/discover/movie?with_companies=2&with_genres=16&vote_count.gte=500' },
+                { type: 'game', id: 's_pix', name: 'Pixar Animation', icon: '💡', endpoint: '/discover/movie?with_companies=3&vote_count.gte=500' },
+                { type: 'game', id: 's_dw', name: 'DreamWorks Animation', icon: '🌙', endpoint: '/discover/movie?with_companies=521' },
+                { type: 'game', id: 's_ghi', name: 'Studio Ghibli', icon: '🍃', endpoint: '/discover/movie?with_companies=10342' },
+                { type: 'game', id: 's_wb', name: 'Warner Bros Pictures', icon: '🛡️', endpoint: '/discover/movie?with_companies=174&vote_count.gte=1000' },
+                { type: 'game', id: 's_uni', name: 'Universal Pictures', icon: '🌎', endpoint: '/discover/movie?with_companies=33&vote_count.gte=1000' },
+            ],
+            m_decades: [
+                { type: 'game', id: 'dec_2020', name: '2020s Hits', icon: '🔥', endpoint: '/discover/movie?primary_release_date.gte=2020-01-01&sort_by=popularity.desc&vote_count.gte=1000' },
+                { type: 'game', id: 'dec_2010', name: '2010s Blockbusters', icon: '📱', endpoint: '/discover/movie?primary_release_date.gte=2010-01-01&primary_release_date.lte=2019-12-31&sort_by=popularity.desc&vote_count.gte=2000' },
+                { type: 'game', id: 'dec_2000', name: '2000s Nostalgia', icon: '💿', endpoint: '/discover/movie?primary_release_date.gte=2000-01-01&primary_release_date.lte=2009-12-31&sort_by=popularity.desc&vote_count.gte=1500' },
+                { type: 'game', id: 'dec_1990', name: '90s Classics', icon: '📼', endpoint: '/discover/movie?primary_release_date.gte=1990-01-01&primary_release_date.lte=1999-12-31&sort_by=popularity.desc&vote_count.gte=1000' },
+                { type: 'game', id: 'dec_1980', name: '80s Retro', icon: '🕹️', endpoint: '/discover/movie?primary_release_date.gte=1980-01-01&primary_release_date.lte=1989-12-31&sort_by=popularity.desc&vote_count.gte=500' },
+                { type: 'game', id: 'dec_1970', name: '70s Cinema', icon: '🎞️', endpoint: '/discover/movie?primary_release_date.gte=1970-01-01&primary_release_date.lte=1979-12-31&sort_by=popularity.desc&vote_count.gte=300' },
+            ],
+            m_regional: [
+                { type: 'game', id: 'b_all', name: 'British Cinema Greats', icon: '🇬🇧', endpoint: '/discover/movie?with_origin_country=GB&vote_count.gte=1000' },
+                { type: 'game', id: 'r_bolly', name: 'Bollywood Hits', icon: '🇮🇳', endpoint: '/discover/movie?with_origin_country=IN&with_original_language=hi&sort_by=popularity.desc&vote_count.gte=100' },
+                { type: 'game', id: 'r_kor', name: 'Korean Thrillers & Drama', icon: '🇰🇷', endpoint: '/discover/movie?with_origin_country=KR&with_original_language=ko&sort_by=popularity.desc&vote_count.gte=200' },
+                { type: 'game', id: 'r_jap', name: 'Japanese Live Action', icon: '🇯🇵', endpoint: '/discover/movie?with_origin_country=JP&with_original_language=ja&without_genres=16&vote_count.gte=100' }, 
+                { type: 'game', id: 'r_fra', name: 'French Cinema', icon: '🇫🇷', endpoint: '/discover/movie?with_origin_country=FR&with_original_language=fr&vote_count.gte=200' }, 
+            ],
+            m_actors: ACTORS_DATA.map(name => ({ type: 'actor', id: name, name: name, icon: '⭐' })),
+
+            // ================= TV SHOWS DEPTH =================
+            tv: [
+                { type: 'nav', id: 'tv_nets', name: 'NETWORKS & STREAMERS', icon: '📡', desc: 'HBO, NETFLIX, AMC, APPLE...' },
+                { type: 'nav', id: 'tv_gens', name: 'BY GENRE', icon: '🎭', desc: 'SITCOMS, SCIFI, CRIME...' },
+                { type: 'nav', id: 'tv_anim', name: 'ANIMATION & ANIME', icon: '🎨', desc: 'SHONEN, ADULT, 90S CARTOONS' },
+                { type: 'nav', id: 'tv_real', name: 'REALITY TV', icon: '🎤', desc: 'SURVIVOR, DATING, COOK
