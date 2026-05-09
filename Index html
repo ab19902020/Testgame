@@ -1,0 +1,2282 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Last Man Standing</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            height: 100dvh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            background-color: #050505;
+            font-family: 'Outfit', sans-serif;
+        }
+        #root {
+            height: 100%;
+            width: 100%;
+        }
+        .arcade-font { font-family: 'Press Start 2P', cursive; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Premium Glows */
+        .neon-text { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5), 0 0 20px rgba(56, 189, 248, 0.3); }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "firebase/app": "https://esm.sh/firebase@11.6.1/app",
+            "firebase/auth": "https://esm.sh/firebase@11.6.1/auth",
+            "firebase/firestore": "https://esm.sh/firebase@11.6.1/firestore"
+        }
+    }
+    </script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+        import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+
+        // 🔥 FIREBASE SETUP
+        let app, auth, db, appId;
+        try {
+          const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+          app = initializeApp(firebaseConfig);
+          auth = getAuth(app);
+          db = getFirestore(app);
+          appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        } catch (e) { console.warn('Firebase init failed (Offline mode only)'); }
+
+        // 🎮 CORE CONFIGURATION & CONSTANTS
+        const TILE_SIZE = 48; 
+        const RES = 2.5; 
+        const MAX_CANVAS_DIMENSION = 4096; 
+
+        const MAP_SIZES = {
+          TINY: { cols: 11, rows: 9, name: 'DUEL (11x9)', max: 4 },
+          SMALL: { cols: 15, rows: 11, name: 'ARENA (15x11)', max: 4 },
+          MEDIUM: { cols: 19, rows: 13, name: 'STADIUM (19x13)', max: 6 },
+          LARGE: { cols: 25, rows: 15, name: 'WARZONE (25x15)', max: 6 },
+          HUGE: { cols: 31, rows: 19, name: 'MEGALOPOLIS (31x19)', max: 6 },
+          MASSIVE: { cols: 41, rows: 25, name: 'TITANIC (41x25)', max: 6 },
+          CUSTOM: { cols: 19, rows: 13, name: 'CUSTOM MAP', max: 6 }
+        };
+
+        const MAP_THEMES = {
+          CLASSIC: { id: 'CLASSIC', name: 'CLASSIC GREEN' },
+          NIGHT: { id: 'NIGHT', name: 'NIGHT BASE' },
+          RETRO: { id: 'RETRO', name: 'RETRO 8-BIT' }
+        };
+
+        const POWERUPS = {
+          BOMB: { id: 1, icon: '💣', color: '#111', bg: '#475569', text: 'BOMB UP' },
+          FIRE: { id: 2, icon: '🔥', color: '#FF0000', bg: '#FDE047', text: 'FIRE UP' },
+          SPEED: { id: 3, icon: '🛼', color: '#0055FF', bg: '#7DD3FC', text: 'SPEED UP' },
+          KICK: { id: 4, icon: '🥾', color: '#8B4513', bg: '#FDBA74', text: 'KICK' },
+          PUNCH: { id: 5, icon: '🥊', color: '#DC2626', bg: '#FCA5A5', text: 'PUNCH' },
+          MEGA: { id: 6, icon: '☢️', color: '#9333EA', bg: '#D8B4FE', text: 'MEGA BOMB' },
+          DIRTY: { id: 7, icon: '☣️', color: '#16A34A', bg: '#86EFAC', text: 'DIRTY BOMB' },
+          SKULL: { id: 8, icon: '☠️', color: '#111', bg: '#94A3B8', text: 'CURSED' },
+          SHIELD: { id: 9, icon: '🛡️', color: '#0891B2', bg: '#67E8F9', text: 'SHIELD' },
+          GHOST: { id: 10, icon: '👻', color: '#475569', bg: '#F1F5F9', text: 'GHOST' },
+          GLOVE: { id: 11, icon: '🧤', color: '#FFF', bg: '#3B82F6', text: 'GLOVE' },
+          HEART: { id: 13, icon: '❤️', color: '#DB2777', bg: '#F9A8D4', text: '1-UP' },
+          DINO: { id: 16, icon: '🦖', color: '#16A34A', bg: '#4ADE80', text: 'DINO MOUNT' },
+          MECH: { id: 17, icon: '🤖', color: '#64748B', bg: '#94A3B8', text: 'MECH SUIT' },
+          HORSE: { id: 18, icon: '🐎', color: '#92400E', bg: '#F59E0B', text: 'HORSE MOUNT' },
+          DOLPHIN: { id: 19, icon: '🐬', color: '#0284C7', bg: '#7DD3FC', text: 'AQUA MOUNT' }
+        };
+
+        const GAME_MODES = {
+          CLASSIC: { id: 'classic', name: 'CLASSIC ARCADE', isTeam: false, timer: 180, suddenDeath: true, startLives: 1, botSpeed: 0.8 },
+          TEAM_3V3: { id: 'team', name: 'TEAM BATTLE', isTeam: true, timer: 180, suddenDeath: true, startLives: 1, botSpeed: 0.9 },
+          BOSS: { id: 'boss', name: 'BOSS RAID (PvE)', isTeam: true, timer: 300, suddenDeath: false, startLives: 3, botSpeed: 0.9 },
+          CRAZY: { id: 'crazy', name: 'CRAZY MOUNTS', isTeam: false, timer: 180, suddenDeath: true, startLives: 1, botSpeed: 1.0 },
+          HARDCORE: { id: 'hardcore', name: 'EXPERT BATTLE', isTeam: false, timer: -1, suddenDeath: false, startLives: 1, botSpeed: 1.25 },
+          SNIPER: { id: 'sniper', name: 'SNIPER BATTLE', isTeam: false, timer: 120, suddenDeath: true, startLives: 1, botSpeed: 1.1 },
+          BLITZ: { id: 'blitz', name: 'BLITZKRIEG', isTeam: false, timer: 60, suddenDeath: true, startLives: 1, botSpeed: 1.0 }
+        };
+
+        const HELMETS = [
+          { id: 0, name: 'NONE' }, { id: 1, name: 'KNIGHT' }, { id: 2, name: 'NINJA' }, 
+          { id: 3, name: 'CROWN' }, { id: 4, name: 'ASTRONAUT' }, { id: 5, name: 'CYBER' }
+        ];
+
+        const CUSTOM_COLORS = ['#FFFFFF', '#FF0055', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#111111', '#EC4899'];
+
+        const PLAYER_COLORS = [
+          { body: '#FFFFFF', limb: '#FF0055', visor: '#00FFFF', name: 'P1' }, 
+          { body: '#333333', limb: '#00FF00', visor: '#FF0000', name: 'BOT 1' },    
+          { body: '#FF0000', limb: '#0055FF', visor: '#FFFF00', name: 'BOT 2' },    
+          { body: '#0000FF', limb: '#FFFF00', visor: '#FF00FF', name: 'BOT 3' },
+          { body: '#F59E0B', limb: '#8B5CF6', visor: '#10B981', name: 'BOT 4' },     
+          { body: '#8B5CF6', limb: '#F59E0B', visor: '#FFFFFF', name: 'BOT 5' },      
+          { body: '#10B981', limb: '#EC4899', visor: '#FDE047', name: 'BOT 6' },
+          { body: '#111111', limb: '#FFFFFF', visor: '#EF4444', name: 'BOT 7' }
+        ];
+
+        const getRgba = (hex, alpha) => {
+            let h = hex.replace('#', ''); if(h.length === 3) h = [...h].map(c => c+c).join('');
+            return `rgba(${parseInt(h.substring(0,2),16)},${parseInt(h.substring(2,4),16)},${parseInt(h.substring(4,6),16)},${alpha})`;
+        };
+
+        // 🔊 AUDIO ENGINE
+        const Sfx = {
+          ctx: null, noiseBuffer: null, fuseNodes: null,
+          init: () => {
+            if (!Sfx.ctx) {
+              Sfx.ctx = new (window.AudioContext || window.webkitAudioContext)();
+              const bufferSize = Sfx.ctx.sampleRate * 2; Sfx.noiseBuffer = Sfx.ctx.createBuffer(1, bufferSize, Sfx.ctx.sampleRate);
+              const output = Sfx.noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+            }
+            if (Sfx.ctx.state === 'suspended') Sfx.ctx.resume();
+          },
+          playTone: (freq, type, dur, vol, slideFreq = null) => {
+            if (!Sfx.ctx) return;
+            const osc = Sfx.ctx.createOscillator(); const gain = Sfx.ctx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, Sfx.ctx.currentTime);
+            if (slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, Sfx.ctx.currentTime + dur);
+            gain.gain.setValueAtTime(vol, Sfx.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, Sfx.ctx.currentTime + dur);
+            osc.connect(gain); gain.connect(Sfx.ctx.destination); osc.start(); osc.stop(Sfx.ctx.currentTime + dur);
+          },
+          playUI: () => Sfx.playTone(600, 'square', 0.1, 0.05, 800),
+          playDrop: () => Sfx.playTone(150, 'triangle', 0.15, 0.1, 50),
+          playBossWarn: () => Sfx.playTone(100, 'sawtooth', 0.5, 0.2, 300),
+          playRoar: () => { Sfx.playTone(120, 'sawtooth', 0.4, 0.15, 60); Sfx.playTone(150, 'square', 0.4, 0.1, 50); },
+          playNeigh: () => { Sfx.playTone(400, 'triangle', 0.1, 0.1, 300); setTimeout(()=>Sfx.playTone(350, 'triangle', 0.1, 0.1, 250), 100); },
+          playSplash: () => {
+            if(!Sfx.ctx || !Sfx.noiseBuffer) return;
+            const noise = Sfx.ctx.createBufferSource(); noise.buffer = Sfx.noiseBuffer;
+            const filter = Sfx.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, Sfx.ctx.currentTime);
+            const gain = Sfx.ctx.createGain(); gain.gain.setValueAtTime(0.3, Sfx.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, Sfx.ctx.currentTime + 0.4);
+            noise.connect(filter); filter.connect(gain); gain.connect(Sfx.ctx.destination); noise.start(); noise.stop(Sfx.ctx.currentTime + 0.4);
+          },
+          updateFuseSound: (activeCount) => {
+              if (!Sfx.ctx || !Sfx.noiseBuffer) return;
+              if (activeCount > 0) {
+                  if (!Sfx.fuseNodes) {
+                      const noise = Sfx.ctx.createBufferSource(); noise.buffer = Sfx.noiseBuffer; noise.loop = true;
+                      const filter = Sfx.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 8000; filter.Q.value = 2; 
+                      const gain = Sfx.ctx.createGain(); gain.gain.setValueAtTime(0, Sfx.ctx.currentTime);
+                      noise.connect(filter); filter.connect(gain); gain.connect(Sfx.ctx.destination); noise.start(); Sfx.fuseNodes = { noise, gain };
+                  }
+                  const targetVol = Math.min(0.005, 0.001 + (activeCount * 0.0004));
+                  Sfx.fuseNodes.gain.gain.linearRampToValueAtTime(targetVol, Sfx.ctx.currentTime + 0.1);
+              } else if (Sfx.fuseNodes) {
+                  Sfx.fuseNodes.gain.gain.linearRampToValueAtTime(0, Sfx.ctx.currentTime + 0.1);
+                  const nodesToClean = Sfx.fuseNodes; Sfx.fuseNodes = null; setTimeout(() => { try { nodesToClean.noise.stop(); } catch(e){} }, 150);
+              }
+          },
+          playExplosion: (isDirty, isMega, rangeIntensity = 1) => {
+            if (!Sfx.ctx || !Sfx.noiseBuffer) return;
+            const t = Sfx.ctx.currentTime; const volMod = Math.min(1.5, 1 + (rangeIntensity * 0.05));
+            if (isMega) {
+              const sub = Sfx.ctx.createOscillator(); const subGain = Sfx.ctx.createGain();
+              sub.type = 'sine'; sub.frequency.setValueAtTime(80, t); sub.frequency.exponentialRampToValueAtTime(10, t + 1.2);
+              subGain.gain.setValueAtTime(0.6 * volMod, t); subGain.gain.exponentialRampToValueAtTime(0.01, t + 1.2);
+              sub.connect(subGain); subGain.connect(Sfx.ctx.destination); sub.start(); sub.stop(t + 1.2);
+              const noise = Sfx.ctx.createBufferSource(); noise.buffer = Sfx.noiseBuffer;
+              const filter = Sfx.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(1500, t); filter.frequency.exponentialRampToValueAtTime(100, t + 0.8);
+              const gain = Sfx.ctx.createGain(); gain.gain.setValueAtTime(0.3 * volMod, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
+              noise.connect(filter); filter.connect(gain); gain.connect(Sfx.ctx.destination); noise.start(); noise.stop(t + 0.8);
+            } else if (isDirty) {
+              const osc = Sfx.ctx.createOscillator(); const fm = Sfx.ctx.createOscillator(); const fmGain = Sfx.ctx.createGain(); const gain = Sfx.ctx.createGain();
+              osc.type = 'square'; fm.type = 'sine'; fm.frequency.value = 50; 
+              fmGain.gain.setValueAtTime(800, t); fmGain.gain.linearRampToValueAtTime(0, t + 0.6);
+              fm.connect(fmGain); fmGain.connect(osc.frequency);
+              osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(20, t + 0.6);
+              gain.gain.setValueAtTime(0.2 * volMod, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+              osc.connect(gain); gain.connect(Sfx.ctx.destination); osc.start(); fm.start(); osc.stop(t + 0.6); fm.stop(t + 0.6);
+            } else {
+              const noise = Sfx.ctx.createBufferSource(); noise.buffer = Sfx.noiseBuffer;
+              const filter = Sfx.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(3000, t); filter.frequency.exponentialRampToValueAtTime(200, t + 0.4);
+              const gain = Sfx.ctx.createGain(); gain.gain.setValueAtTime(0.2 * volMod, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+              noise.connect(filter); filter.connect(gain); gain.connect(Sfx.ctx.destination); noise.start(); noise.stop(t + 0.4);
+            }
+          },
+          playPowerup: () => {
+             if (!Sfx.ctx) return; const t = Sfx.ctx.currentTime;
+             const osc = Sfx.ctx.createOscillator(); const gain = Sfx.ctx.createGain(); osc.type = 'sine';
+             osc.frequency.setValueAtTime(600, t); osc.frequency.exponentialRampToValueAtTime(1200, t+0.2);
+             gain.gain.setValueAtTime(0.1, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+             osc.connect(gain); gain.connect(Sfx.ctx.destination); osc.start(); osc.stop(t + 0.2);
+          },
+          playDeath: () => Sfx.playTone(300, 'sawtooth', 0.8, 0.15, 50),
+          playShieldBreak: () => { Sfx.playTone(800, 'square', 0.2, 0.1, 200); Sfx.playTone(1000, 'triangle', 0.3, 0.1, 100); }
+        };
+
+        // ✨ VFX ENGINE
+        const GameJuice = {
+          particles: [], shockwaves: [], shakeIntensity: 0,
+          triggerShake: (intensity) => { GameJuice.shakeIntensity = Math.max(GameJuice.shakeIntensity, intensity); },
+          emitDebris: (c, r, themeId) => {
+            if (GameJuice.particles.length > 500) return;
+            const isRetro = themeId === 'RETRO';
+            for(let i=0; i<10; i++) {
+              GameJuice.particles.push({
+                x: c*TILE_SIZE+TILE_SIZE/2, y: r*TILE_SIZE+TILE_SIZE/2, vx: (Math.random() - 0.5) * 16, vy: (Math.random() - 0.5) * 16 - 6, vz: 4 + Math.random()*8,
+                life: 1.0, maxLife: 0.4 + Math.random()*0.5, color: isRetro ? '#E11D48' : ['#E68A45', '#C27A3E', '#A45D23'][Math.floor(Math.random()*3)], 
+                type: 'wood', size: 4 + Math.random()*5, rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.8
+              });
+            }
+          },
+          emitDust: (x, y, color='rgba(255,255,255,0.4)') => {
+            if (GameJuice.particles.length > 500) return;
+            if(Math.random() > 0.4) return; 
+            GameJuice.particles.push({ x, y: y+10, vx: (Math.random()-0.5)*2, vy: -Math.random()*2, vz: 0, life: 1.0, maxLife: 0.2 + Math.random()*0.2, color, type: 'dust', size: 2+Math.random()*3 });
+          },
+          emitSmoke: (x, y, color='#444') => {
+             if (GameJuice.particles.length > 500) return;
+             for(let i=0; i<2; i++) {
+                 GameJuice.particles.push({ x: x + (Math.random()-0.5)*15, y: y + (Math.random()-0.5)*15, vx: (Math.random()-0.5)*3, vy: -5 - Math.random()*10, vz: 0, life: 1.0, maxLife: 0.3 + Math.random()*0.3, color, type: 'smoke', size: 6 + Math.random()*6 });
+             }
+          },
+          emitSparks: (x, y, color) => {
+             if (GameJuice.particles.length > 500) return;
+             for(let i=0; i<10; i++) GameJuice.particles.push({ x, y, vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20, vz: 5 + Math.random()*8, life: 1.0, maxLife: 0.3 + Math.random()*0.3, color, type: 'spark', size: 2 + Math.random()*3 });
+          },
+          emitText: (x, y, text, color='#FFD700') => { GameJuice.particles.push({ x, y, vx: 0, vy: -30, vz: 0, life: 1.5, maxLife: 1.5, text, type: 'text', color }); },
+          emitShockwave: (x, y, color) => { GameJuice.shockwaves.push({ x, y, radius: 10, maxRadius: TILE_SIZE * 1.5, life: 1.0, color }); },
+          update: (dt) => {
+            if (GameJuice.shakeIntensity > 0) GameJuice.shakeIntensity *= 0.85;
+            for (let i = GameJuice.shockwaves.length - 1; i >= 0; i--) {
+                let sw = GameJuice.shockwaves[i]; sw.life -= (dt/400); sw.radius += 100 * (dt/1000); if (sw.life <= 0) GameJuice.shockwaves.splice(i, 1);
+            }
+            for (let i = GameJuice.particles.length - 1; i >= 0; i--) {
+              let p = GameJuice.particles[i]; p.life -= (dt/1000);
+              if (p.life <= 0) { GameJuice.particles.splice(i, 1); continue; }
+              p.x += p.vx * (dt/16); p.y += p.vy * (dt/16);
+              if (p.type === 'wood' || p.type === 'spark') {
+                  if (p.vz !== undefined) { p.y -= p.vz * (dt/16); p.vz -= 1.2 * (dt/16); if (p.vz < 0 && p.y > p.y + p.vz) { p.vz *= -0.5; p.vx *= 0.7; p.vy *= 0.7; } }
+                  if (p.type === 'wood') p.rot += p.rotV;
+                  if (p.type === 'spark') { p.vx *= 0.90; p.vy *= 0.90; }
+              } else if (p.type === 'smoke' || p.type === 'dust') { p.size += 15 * (dt/1000); p.vx *= 0.95; p.vy *= 0.95; }
+            }
+          }
+        };
+
+        // 🧠 HUNTER AI & TEAM LOGIC
+        const BotAI = {
+          getWalkable: (c, r, s, bot, ignoreBombC, ignoreBombR) => {
+            if (c < 0 || c >= s.cols || r < 0 || r >= s.rows) return false;
+            if (s.board[r*s.cols + c] === 1) return false;
+            if (!bot.isGhost && s.board[r*s.cols + c] === 2) return false;
+            if (s.bombs.some(b => b.c === c && b.r === r && b.dx === 0 && b.dy === 0 && !b.isFlying && !b.carriedBy && !(c === ignoreBombC && r === ignoreBombR))) return false;
+            if (s.boss && s.boss.active) { 
+                 const bc = Math.floor(s.boss.x/TILE_SIZE); const br = Math.floor(s.boss.y/TILE_SIZE);
+                 if (c >= bc && c <= bc+1 && r >= br && r <= br+1) return false;
+            }
+            return true;
+          },
+          buildDangerMap: (s, additionalBombs = []) => {
+            let map = Array(s.cols * s.rows).fill(0); 
+            const allBombs = [...s.bombs.filter(b=>!b.carriedBy && !b.isFlying), ...additionalBombs];
+            s.explosions.forEach(e => { if(e.c >= 0 && e.c < s.cols && e.r >= 0 && e.r < s.rows) map[e.r*s.cols + e.c] = 2; });
+            if (s.boss && s.boss.active && s.boss.state === 'charge_laser') {
+                for(let c=0; c<s.cols; c++) map[Math.floor(s.boss.y/TILE_SIZE) * s.cols + c] = 2;
+                for(let r=0; r<s.rows; r++) map[r * s.cols + Math.floor(s.boss.x/TILE_SIZE)] = 2;
+            }
+            allBombs.forEach(b => {
+                const threatLevel = b.timer < 800 ? 2 : 1; 
+                if(b.c >= 0 && b.c < s.cols && b.r >= 0 && b.r < s.rows) map[b.r*s.cols + b.c] = Math.max(map[b.r*s.cols + b.c], threatLevel); 
+                if (b.isDirty || b.isMega) {
+                    const rRad = b.isDirty ? Math.min(6, 3 + Math.floor(b.range / 2)) : Math.min(4, b.range); 
+                    for(let r = -rRad; r <= rRad; r++) for(let c = -rRad; c <= rRad; c++) {
+                       const nc = b.c+c, nr = b.r+r;
+                       if(nc>0 && nc<s.cols-1 && nr>0 && nr<s.rows-1 && s.board[nr*s.cols + nc] !== 1) map[nr*s.cols + nc] = Math.max(map[nr*s.cols + nc], threatLevel);
+                    }
+                } else {
+                    [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].forEach(d => {
+                        for(let i=1; i<=b.range; i++) {
+                           let nc = b.c + d.x*i, nr = b.r + d.y*i;
+                           if(nc<=0 || nc>=s.cols-1 || nr<=0 || nr>=s.rows-1 || s.board[nr*s.cols + nc] === 1) break; 
+                           map[nr*s.cols + nc] = Math.max(map[nr*s.cols + nc], threatLevel);
+                           if(s.board[nr*s.cols + nc] === 2) break; 
+                        }
+                    });
+                }
+            });
+            return map;
+          },
+          bfsFindPath: (startC, startR, targetCond, dangerMap, s, bot, maxDepth = 40, ignoreDanger = false) => {
+            if (targetCond(startC, startR)) return []; 
+            let queue = [{c: startC, r: startR, path: []}]; let visited = new Set([`${startC},${startR}`]);
+            const dirs = [[0,-1],[0,1],[-1,0],[1,0]].sort(() => Math.random() - 0.5);
+            while (queue.length > 0) {
+              let curr = queue.shift(); if (curr.path.length >= maxDepth) continue;
+              for (const [dc, dr] of dirs) {
+                const nc = curr.c + dc; const nr = curr.r + dr;
+                if (BotAI.getWalkable(nc, nr, s, bot, startC, startR) && !visited.has(`${nc},${nr}`)) {
+                  if (!ignoreDanger && dangerMap[nr * s.cols + nc] > 0) continue;
+                  if (ignoreDanger && dangerMap[nr * s.cols + nc] === 2) continue; 
+                  visited.add(`${nc},${nr}`); const newPath = [...curr.path, {c: nc, r: nr}];
+                  if (targetCond(nc, nr)) return newPath;
+                  queue.push({c: nc, r: nr, path: newPath});
+                }
+              }
+            }
+            return null; 
+          },
+          isSafeToDropBombAt: (myC, myR, bot, s) => {
+              const activeCount = s.bombs.filter(b => b.owner === bot.id && !b.exploded).length;
+              const testBomb = { c: myC, r: myR, range: bot.range, isDirty: bot.hasDirty && activeCount===0, isMega: bot.hasMega && activeCount===0 && !bot.hasDirty, dx: 0, dy: 0, timer: 3000 };
+              const futureDangerMap = BotAI.buildDangerMap(s, [testBomb]);
+              
+              if (s.mode.isTeam) {
+                  const teammates = s.players.filter(p => p.team === bot.team && p.id !== bot.id && p.alive);
+                  for (let tm of teammates) {
+                      const tmC = Math.floor(tm.x/TILE_SIZE); const tmR = Math.floor(tm.y/TILE_SIZE);
+                      if (futureDangerMap[tmR*s.cols + tmC] > 0) return false; 
+                  }
+              }
+
+              let queue = [{c: myC, r: myR, dist: 0}]; let visited = new Set([`${myC},${myR}`]);
+              const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+              while (queue.length > 0) {
+                  let {c, r, dist} = queue.shift();
+                  if (futureDangerMap[r * s.cols + c] === 0) return true; 
+                  if (dist > 6) continue; 
+                  for (const [dc, dr] of dirs) {
+                      const nc = c + dc; const nr = r + dr;
+                      if (BotAI.getWalkable(nc, nr, s, bot, myC, myR) && !visited.has(`${nc},${nr}`)) {
+                          if (futureDangerMap[nr * s.cols + nc] !== 2) { 
+                              visited.add(`${nc},${nr}`); queue.push({c: nc, r: nr, dist: dist + 1});
+                          }
+                      }
+                  }
+              }
+              return false; 
+          },
+          isSafeToDropBomb: (bot, s) => BotAI.isSafeToDropBombAt(Math.floor(bot.x/TILE_SIZE), Math.floor(bot.y/TILE_SIZE), bot, s)
+        };
+
+        // 🎨 4K HIGH-FIDELITY RENDERER
+        const Renderer = {
+          drawFloor: (ctx, cols, rows, theme) => {
+            for (let r = 0; r < rows; r++) {
+              for (let c = 0; c < cols; c++) {
+                const x = c * TILE_SIZE; const y = r * TILE_SIZE;
+                if (theme.id === 'CLASSIC') {
+                    ctx.fillStyle = ((r + c) % 2 === 0) ? '#4ADE80' : '#22C55E'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    if ((r + c) % 2 !== 0) {
+                        ctx.fillStyle = '#166534'; ctx.globalAlpha = 0.4;
+                        ctx.beginPath(); ctx.moveTo(x+10, y+38); ctx.lineTo(x+14, y+30); ctx.lineTo(x+18, y+38); ctx.fill(); ctx.globalAlpha = 1.0;
+                    }
+                } else if (theme.id === 'NIGHT') {
+                    const grad = ctx.createLinearGradient(0, y, 0, y+TILE_SIZE);
+                    grad.addColorStop(0, '#0F172A'); grad.addColorStop(1, '#020617');
+                    ctx.fillStyle = grad; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#1E293B'; ctx.lineWidth = 1; ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+                    ctx.shadowBlur = 8; ctx.shadowColor = '#0EA5E9'; ctx.fillStyle = '#38BDF8'; ctx.fillRect(x-2, y-2, 4, 4); ctx.shadowBlur = 0;
+                } else if (theme.id === 'RETRO') {
+                    ctx.fillStyle = '#000000'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    if ((r+c)%2===0) { ctx.fillStyle = '#111'; ctx.fillRect(x+TILE_SIZE/2, y+TILE_SIZE/2, 2, 2); }
+                }
+              }
+            }
+          },
+          drawHardBlock: (ctx, x, y, isBoundary, theme) => {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(x + 4, y + 6, TILE_SIZE, TILE_SIZE);
+            if (theme.id === 'CLASSIC') {
+                const grad = ctx.createLinearGradient(x, y, x+TILE_SIZE, y+TILE_SIZE);
+                grad.addColorStop(0, '#CBD5E1'); grad.addColorStop(1, '#475569');
+                ctx.fillStyle = grad; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.fillStyle = '#F1F5F9'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+TILE_SIZE, y); ctx.lineTo(x+40, y+8); ctx.lineTo(x+8, y+8); ctx.fill();
+                ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.moveTo(x, y+TILE_SIZE); ctx.lineTo(x+TILE_SIZE, y+TILE_SIZE); ctx.lineTo(x+40, y+40); ctx.lineTo(x+8, y+40); ctx.fill();
+                ctx.fillStyle = '#E2E8F0'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y+TILE_SIZE); ctx.lineTo(x+8, y+40); ctx.lineTo(x+8, y+8); ctx.fill();
+                ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.moveTo(x+TILE_SIZE, y); ctx.lineTo(x+TILE_SIZE, y+TILE_SIZE); ctx.lineTo(x+40, y+40); ctx.lineTo(x+40, y+8); ctx.fill();
+                ctx.fillStyle = '#94A3B8'; ctx.fillRect(x+8, y+8, 32, 32);
+            } else if (theme.id === 'NIGHT') {
+                ctx.fillStyle = isBoundary ? '#020617' : '#0F172A'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#38BDF8'; ctx.lineWidth = 1.5; ctx.strokeRect(x+1, y+1, TILE_SIZE-2, TILE_SIZE-2);
+                ctx.fillStyle = '#0EA5E9'; ctx.fillRect(x, y, 6, 6); ctx.fillRect(x+TILE_SIZE-6, y, 6, 6); ctx.fillRect(x, y+TILE_SIZE-6, 6, 6); ctx.fillRect(x+TILE_SIZE-6, y+TILE_SIZE-6, 6, 6);
+                ctx.fillStyle = '#0B1120'; ctx.fillRect(x+6, y+6, TILE_SIZE-12, TILE_SIZE-12);
+                if (!isBoundary) { ctx.shadowBlur = 10; ctx.shadowColor = '#0EA5E9'; ctx.fillStyle = '#E0F2FE'; ctx.fillRect(x+TILE_SIZE/2 - 4, y+TILE_SIZE/2 - 4, 8, 8); ctx.shadowBlur = 0; }
+            } else if (theme.id === 'RETRO') {
+                ctx.fillStyle = '#000'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 4; ctx.strokeRect(x+2, y+2, TILE_SIZE-4, TILE_SIZE-4);
+                if (!isBoundary) { ctx.strokeStyle = '#60A5FA'; ctx.lineWidth = 2; ctx.strokeRect(x+10, y+10, TILE_SIZE-20, TILE_SIZE-20); }
+            }
+          },
+          drawSoftBlock: (ctx, x, y, theme) => {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(x + 4, y + 6, TILE_SIZE, TILE_SIZE);
+            if (theme.id === 'CLASSIC') {
+                const grad = ctx.createLinearGradient(x, y, x, y+TILE_SIZE);
+                grad.addColorStop(0, '#D97706'); grad.addColorStop(1, '#92400E');
+                ctx.fillStyle = grad; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.lineWidth = 4; ctx.strokeStyle = '#78350F'; ctx.strokeRect(x+2, y+2, 44, 44);
+                ctx.strokeStyle = '#92400E'; ctx.beginPath(); ctx.moveTo(x+4, y+4); ctx.lineTo(x+44, y+44); ctx.moveTo(x+44, y+4); ctx.lineTo(x+4, y+44); ctx.stroke();
+            } else if (theme.id === 'NIGHT') {
+                const grad = ctx.createLinearGradient(x, y, x, y+TILE_SIZE);
+                grad.addColorStop(0, '#1E293B'); grad.addColorStop(1, '#0F172A');
+                ctx.fillStyle = grad; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#0EA5E9'; ctx.lineWidth = 2; ctx.strokeRect(x+3, y+3, TILE_SIZE-6, TILE_SIZE-6);
+                ctx.beginPath(); ctx.moveTo(x+6, y+6); ctx.lineTo(x+TILE_SIZE-6, y+TILE_SIZE-6); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x+TILE_SIZE-6, y+6); ctx.lineTo(x+6, y+TILE_SIZE-6); ctx.stroke();
+                ctx.fillStyle = '#020617'; ctx.beginPath(); ctx.arc(x+TILE_SIZE/2, y+TILE_SIZE/2, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#0EA5E9'; ctx.beginPath(); ctx.arc(x+TILE_SIZE/2, y+TILE_SIZE/2, 4, 0, Math.PI*2); ctx.fill();
+            } else if (theme.id === 'RETRO') {
+                ctx.fillStyle = '#000'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#E11D48'; ctx.lineWidth = 4; ctx.strokeRect(x+2, y+2, TILE_SIZE-4, TILE_SIZE-4);
+                ctx.strokeStyle = '#F43F5E'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x+TILE_SIZE-2, y+TILE_SIZE-2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x+TILE_SIZE-2, y+2); ctx.lineTo(x+2, y+TILE_SIZE-2); ctx.stroke();
+            }
+          },
+          drawItemBox: (ctx, type, cx, cy, z, frame) => {
+            const time = Date.now() / 1000; const hover = Math.sin(time * 3 + cx) * 5; const drawY = cy - z + hover;
+            ctx.fillStyle = `rgba(0,0,0,${Math.max(0.1, 0.4 - (z || 0)/100)})`; ctx.beginPath(); ctx.ellipse(cx, cy+18, 14, 5, 0, 0, Math.PI*2); ctx.fill();
+            const glow = ctx.createRadialGradient(cx, cy+10, 0, cx, cy+10, 25);
+            glow.addColorStop(0, getRgba(type.bg, 0.5)); glow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = glow; ctx.fillRect(cx-25, cy-15, 50, 50);
+
+            ctx.save(); ctx.translate(cx, drawY); ctx.scale(Math.abs(Math.sin(time*2.5 + cx)), 1); 
+            ctx.fillStyle = '#E2E8F0'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#94A3B8'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI); ctx.fill(); 
+            
+            const gemGrad = ctx.createRadialGradient(-5, -5, 0, 0, 0, 14);
+            gemGrad.addColorStop(0, '#FFF'); gemGrad.addColorStop(1, type.bg);
+            ctx.fillStyle = gemGrad; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = '#111'; ctx.font = 'bold 16px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(type.icon, 0, 1);
+            ctx.restore();
+          },
+
+          drawPlayer: (ctx, p, frame) => {
+            if (!p.alive) return;
+            ctx.save();
+            
+            if (p.iFrames > 0) { if (Math.floor(Date.now() / 150) % 2 === 0) ctx.globalAlpha = 0.3; } 
+            else if (p.isGhost) { ctx.globalAlpha = 0.6; }
+
+            const bounce = p.moving && p.mount !== 19 ? Math.abs(Math.sin(frame * 0.3)) * 6 : 0;
+            const waddle = p.moving && p.mount !== 19 ? Math.sin(frame * 0.3) * 0.1 : 0;
+            const drawY = p.y - bounce - (p.z || 0);
+
+            if (p.isDiving > 0) {
+                ctx.fillStyle = '#0284C7'; 
+                ctx.beginPath(); ctx.moveTo(p.x, p.y + 10); ctx.quadraticCurveTo(p.x - 10, p.y + 15, p.x - 15, p.y); 
+                ctx.quadraticCurveTo(p.x, p.y - 25, p.x + 15, p.y); ctx.quadraticCurveTo(p.x + 10, p.y + 15, p.x, p.y + 10); ctx.fill();
+                GameJuice.emitDust(p.x, p.y, 'rgba(125, 211, 252, 0.6)'); 
+                ctx.restore(); return; 
+            }
+
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; 
+            ctx.beginPath(); ctx.ellipse(p.x, p.y + 16, p.mount ? 22 : 14, p.mount ? 12 : 7, 0, 0, Math.PI*2); ctx.fill();
+
+            ctx.translate(p.x, drawY); ctx.rotate(waddle);
+
+            if (p.mount) {
+                if (p.mount === 16) { 
+                    const dGrad = ctx.createLinearGradient(0, -10, 0, 15); dGrad.addColorStop(0, '#4ADE80'); dGrad.addColorStop(1, '#14532D');
+                    ctx.fillStyle = dGrad; ctx.beginPath(); ctx.roundRect(-14, -5, 28, 22, 8); ctx.fill(); 
+                    ctx.fillStyle = '#FDE047'; ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-10, -6); ctx.lineTo(-6, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(10, -6); ctx.lineTo(14, 0); ctx.fill();
+                    ctx.fillStyle = '#22C55E'; ctx.beginPath(); ctx.roundRect(6, -18, 16, 18, 6); ctx.fill();
+                    ctx.fillStyle = '#DC2626'; ctx.fillRect(16, -12, 4, 2); 
+                    ctx.fillStyle = '#FFF'; ctx.fillRect(18, -4, 4, 4); 
+                    ctx.fillStyle = dGrad; ctx.beginPath(); ctx.moveTo(-12, 10); ctx.lineTo(-28, 15); ctx.lineTo(-12, 18); ctx.fill();
+                    ctx.fillStyle = '#064E3B'; ctx.fillRect(-8, 15, 6, 12); ctx.fillRect(6, 15, 6, 12); 
+                } else if (p.mount === 17) { 
+                    const mGrad = ctx.createLinearGradient(0, -10, 0, 20); mGrad.addColorStop(0, '#94A3B8'); mGrad.addColorStop(1, '#475569');
+                    ctx.fillStyle = mGrad; ctx.beginPath(); ctx.roundRect(-22, -10, 44, 28, 4); ctx.fill();
+                    ctx.fillStyle = '#1E293B'; ctx.fillRect(-12, 0, 24, 10); 
+                    ctx.fillStyle = '#94A3B8'; ctx.beginPath(); ctx.roundRect(-30, -10, 10, 16, 2); ctx.fill(); ctx.beginPath(); ctx.roundRect(20, -10, 10, 16, 2); ctx.fill();
+                    ctx.fillStyle = '#334155'; ctx.fillRect(-14, 18, 10, 12); ctx.fillRect(4, 18, 10, 12); 
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#0EA5E9'; ctx.fillStyle = '#38BDF8'; ctx.beginPath(); ctx.arc(0, -5, 6, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+                } else if (p.mount === 18) {
+                    const hGrad = ctx.createLinearGradient(0, -5, 0, 11); hGrad.addColorStop(0, '#B45309'); hGrad.addColorStop(1, '#78350F');
+                    ctx.fillStyle = hGrad; ctx.beginPath(); ctx.roundRect(-16, -5, 32, 16, 4); ctx.fill(); 
+                    ctx.beginPath(); ctx.roundRect(8, -20, 12, 20, 4); ctx.fill(); 
+                    ctx.fillStyle = '#000'; ctx.fillRect(16, -16, 3, 3); 
+                    ctx.fillStyle = '#111'; ctx.fillRect(4, -20, 4, 16); 
+                    ctx.fillStyle = '#451A03'; ctx.fillRect(-12, 11, 4, 14); ctx.fillRect(8, 11, 4, 14); 
+                    ctx.fillStyle = '#F59E0B'; ctx.fillRect(-8, -6, 16, 4); 
+                } else if (p.mount === 19) {
+                    const aquaGrad = ctx.createLinearGradient(0, -10, 0, 10); aquaGrad.addColorStop(0, '#38BDF8'); aquaGrad.addColorStop(1, '#0369A1');
+                    ctx.fillStyle = aquaGrad; ctx.beginPath(); ctx.ellipse(0, 5, 22, 14, 0, 0, Math.PI*2); ctx.fill(); 
+                    ctx.beginPath(); ctx.moveTo(-20, 5); ctx.lineTo(-35, -5); ctx.lineTo(-30, 15); ctx.fill(); 
+                    ctx.fillStyle = '#0284C7'; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(-8, -18); ctx.lineTo(8, -5); ctx.fill(); 
+                    ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.ellipse(0, 12, 18, 6, 0, 0, Math.PI*2); ctx.fill(); 
+                    ctx.fillStyle = '#000'; ctx.fillRect(12, 0, 3, 3); 
+                }
+                ctx.translate(0, -22); ctx.scale(0.65, 0.65); 
+            }
+
+            const c = p; 
+            const isUp = p.dir === 'up'; const isDown = p.dir === 'down'; const isSide = p.dir === 'left' || p.dir === 'right';
+
+            ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+            
+            if (p.hasShield) {
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.arc(0, -6, 26, 0, Math.PI*2); ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = '#000';
+            }
+
+            const bGrad = ctx.createRadialGradient(0, -10, 0, 0, -10, 20);
+            bGrad.addColorStop(0, '#FFF'); bGrad.addColorStop(1, c.body);
+            ctx.fillStyle = bGrad; const bw = isSide ? 24 : 32; ctx.fillRect(-bw/2, -8, bw, 24); ctx.strokeRect(-bw/2, -8, bw, 24);
+            
+            ctx.fillStyle = c.limb;
+            if (isDown || isUp) {
+              ctx.beginPath(); ctx.arc(-8, 16, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.arc(8, 16, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.arc(-16, 6, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.arc(16, 6, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            } else {
+              ctx.beginPath(); ctx.arc(-4, 16, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.arc(4, 16, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.arc(p.dir==='left'?-14:14, 6, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            }
+            
+            ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(0, -18, 16, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            
+            if (!isUp) {
+                const visorWidth = isSide ? 14 : 20; const vxOffset = isSide ? (p.dir === 'left' ? -12 : -2) : -10;
+                ctx.fillStyle = '#111'; ctx.fillRect(vxOffset, -24, visorWidth, 6); 
+                ctx.shadowBlur = 10; ctx.shadowColor = c.visor || '#00FFFF'; ctx.fillStyle = c.visor || '#00FFFF';
+                ctx.fillRect(vxOffset + 2, -22, visorWidth - 4, 2); ctx.shadowBlur = 0; 
+            }
+
+            ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(0, -40); ctx.stroke();
+            ctx.fillStyle = c.limb; ctx.beginPath(); ctx.arc(0, -42, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+            if (p.helmet === 1) { 
+                ctx.fillStyle = '#94A3B8'; ctx.beginPath(); ctx.arc(0, -20, 17, Math.PI, 0); ctx.fill(); ctx.stroke();
+                ctx.fillRect(-17, -20, 34, 14); ctx.strokeRect(-17, -20, 34, 14); ctx.fillStyle = '#111'; ctx.fillRect(-8, -16, 16, 4); 
+            } else if (p.helmet === 2) { 
+                ctx.fillStyle = c.limb; ctx.beginPath(); ctx.arc(0, -18, 16.5, 0, Math.PI*2); ctx.fill(); 
+                ctx.fillStyle = '#FFE4C4'; ctx.fillRect(-10, -26, 20, 10); ctx.fillStyle = '#111'; ctx.fillRect(-6, -24, 4, 4); ctx.fillRect(2, -24, 4, 4); 
+            } else if (p.helmet === 3) { 
+                ctx.fillStyle = '#FBBF24'; ctx.beginPath(); ctx.moveTo(-14, -26); ctx.lineTo(-18, -40); ctx.lineTo(-8, -32); ctx.lineTo(0, -42); ctx.lineTo(8, -32); ctx.lineTo(18, -40); ctx.lineTo(14, -26); ctx.fill(); ctx.stroke();
+            } else if (p.helmet === 4) { 
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, -18, 22, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            } else if (p.helmet === 5) { 
+                ctx.fillStyle = '#1E293B'; ctx.beginPath(); ctx.arc(0, -22, 17, Math.PI, 0); ctx.fill(); ctx.fillStyle = c.visor; ctx.fillRect(-17, -22, 34, 8); 
+            }
+            
+            ctx.rotate(-waddle); 
+            
+            if (p.skullTimer > 0) { ctx.fillStyle='#A0A'; ctx.font='bold 20px Arial'; ctx.fillText('☠', -25, -25); }
+            if (p.hasDirty) { ctx.fillStyle='#10B981'; ctx.font='bold 16px Arial'; ctx.fillText('☣', 25, -25); }
+            else if (p.hasMega) { ctx.fillStyle='#D946EF'; ctx.font='bold 16px Arial'; ctx.fillText('☢', 25, -25); }
+
+            ctx.fillStyle = '#FFF'; ctx.font = '8px "Press Start 2P", monospace'; ctx.textAlign='center';
+            ctx.lineWidth = 3; ctx.strokeStyle = '#000'; 
+            const textY = p.mount ? -90 : -52;
+            ctx.strokeText(p.name, 0, textY); ctx.fillText(p.name, 0, textY);
+            ctx.restore();
+          },
+
+          drawBoss: (ctx, boss, frame) => {
+             if (!boss || !boss.active) return;
+             ctx.save();
+             const bounce = Math.abs(Math.sin(frame * 0.1)) * 4; ctx.translate(boss.x, boss.y - bounce);
+             
+             ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.beginPath(); ctx.ellipse(0, 40 + bounce, 45, 15, 0, 0, Math.PI*2); ctx.fill();
+             
+             const bGrad = ctx.createLinearGradient(0, -40, 0, 40); bGrad.addColorStop(0, '#475569'); bGrad.addColorStop(1, '#0F172A');
+             ctx.fillStyle = bGrad; ctx.beginPath(); ctx.roundRect(-40, -40, 80, 80, 16); ctx.fill();
+             ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.stroke();
+             ctx.fillStyle = '#334155'; ctx.fillRect(-30, -30, 60, 20);
+             
+             const eyeColor = boss.state === 'charge_laser' ? '#FFF' : '#EF4444';
+             const eyeGlow = boss.state === 'charge_laser' ? '#38BDF8' : '#DC2626';
+             
+             ctx.shadowBlur = 20; ctx.shadowColor = eyeGlow; ctx.fillStyle = eyeColor;
+             ctx.beginPath(); ctx.roundRect(-20, 0, 40, 15, 4); ctx.fill(); ctx.shadowBlur = 0;
+
+             if (boss.state === 'charge_laser') {
+                 ctx.strokeStyle = '#38BDF8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 7, 20 + Math.random()*15, 0, Math.PI*2); ctx.stroke();
+             }
+
+             const hpRatio = boss.hp / boss.maxHp;
+             ctx.fillStyle = '#000'; ctx.fillRect(-40, -60, 80, 10);
+             ctx.fillStyle = hpRatio > 0.5 ? '#10B981' : (hpRatio > 0.2 ? '#F59E0B' : '#EF4444');
+             ctx.fillRect(-38, -58, 76 * hpRatio, 6);
+             ctx.restore();
+          },
+
+          drawBomb: (ctx, b) => {
+              const isCritical = b.timer < 500 && !b.isFlying;
+              const pulseSpeed = isCritical ? 20 : (b.timer < 1500 ? 50 : 150);
+              const scale = 1 + Math.sin(Date.now() / pulseSpeed) * (isCritical ? 0.2 : 0.1);
+              const bx = Math.round(b.px); const by = Math.round(b.py) - (b.z || 0); 
+              
+              if (!b.carriedBy) {
+                  ctx.fillStyle = `rgba(0,0,0,${Math.max(0.1, 0.4 - (b.z || 0)/100)})`; 
+                  ctx.beginPath(); ctx.ellipse(bx, Math.round(b.py) + 14, 16, 5, 0, 0, Math.PI*2); ctx.fill();
+              }
+
+              const timeMs = Date.now();
+              let shellColor = b.isDirty ? '#064E3B' : (b.isMega ? '#4A044E' : '#1E293B');
+              let highColor = b.isDirty ? '#10B981' : (b.isMega ? '#D946EF' : '#475569');
+              
+              if (isCritical && Math.floor(timeMs / 50) % 2 === 0) { shellColor = '#EF4444'; highColor = '#FCA5A5'; }
+              if (isCritical && Math.floor(timeMs / 25) % 2 === 0) { shellColor = '#FFF'; highColor = '#FFF'; }
+
+              const grad = ctx.createRadialGradient(bx-5, by-5, 0, bx, by, 20);
+              grad.addColorStop(0, highColor); grad.addColorStop(1, shellColor);
+              ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(bx, by, 20 * scale, 0, Math.PI*2); ctx.fill(); 
+              ctx.lineWidth=2; ctx.strokeStyle= '#000'; ctx.stroke();
+              
+              if (b.isDirty) { ctx.fillStyle = '#10B981'; ctx.font='bold 20px Arial'; ctx.textAlign='center'; ctx.fillText('☣', bx, by+6); }
+              else if (b.isMega) { ctx.fillStyle = '#D946EF'; ctx.font='bold 20px Arial'; ctx.textAlign='center'; ctx.fillText('☢', bx, by+6); }
+              else { 
+                 ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(bx-6, by-6, 6 * scale, 0, Math.PI*2); ctx.fill(); 
+                 ctx.strokeStyle = '#F59E0B'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(bx, by-18); ctx.quadraticCurveTo(bx+8, by-28, bx+14, by-22); ctx.stroke();
+                 const isSparking = Math.floor(timeMs / 50) % 2 === 0;
+                 ctx.fillStyle = isSparking ? '#FFF' : '#EF4444'; ctx.beginPath(); ctx.arc(bx+14, by-22, 5+Math.random()*4, 0, Math.PI*2); ctx.fill(); 
+              }
+          }
+        };
+
+        // ⚛️ MAIN APP COMPONENT
+        function App() {
+          const [view, setView] = useState('menu'); 
+          const [selectedMode, setSelectedMode] = useState(GAME_MODES.CLASSIC);
+          const [mapSize, setMapSize] = useState('MEDIUM');
+          const [mapTheme, setMapTheme] = useState('CLASSIC');
+          
+          const [playerCount, setPlayerCount] = useState(4);
+          const [lobbyPlayers, setLobbyPlayers] = useState([]);
+          const [availableRooms, setAvailableRooms] = useState([]);
+
+          const [user, setUser] = useState(null);
+          const [networkState, setNetworkState] = useState('offline'); 
+          const [roomId, setRoomId] = useState('');
+          const [joinCode, setJoinCode] = useState('');
+          
+          const [editorMap, setEditorMap] = useState(null);
+          const [editorTool, setEditorTool] = useState(1); 
+          
+          const customRef = useRef({ color: '#FFFFFF', limb: '#FF0055', helmet: 0 });
+          const [uiColor, setUiColor] = useState('#FFFFFF');
+          const [uiHelmet, setUiHelmet] = useState(0);
+
+          const canvasRef = useRef(null);
+          const bgCanvasRef = useRef(null); 
+          const ctxRef = useRef(null);
+          const reqRef = useRef(null);
+          const lastTimeRef = useRef(0);
+          const hitStopRef = useRef(0);
+          const viewRef = useRef(view);
+          const syncTimerRef = useRef(0);
+          
+          const keys = useRef({});
+          const touchDpad = useRef({ x: 0, y: 0 });
+          const actionPrimaryBtn = useRef(false);   
+          const actionSecondaryBtn = useRef(false); 
+          const remoteInputsRef = useRef({});
+          
+          const [uiTick, setUiTick] = useState(0);
+          const [isFullscreen, setIsFullscreen] = useState(false);
+
+          const state = useRef({
+            mode: GAME_MODES.CLASSIC, cols: 19, rows: 13, width: 19*48, height: 13*48, theme: MAP_THEMES.CLASSIC, currentRes: RES,
+            board: [], players: [], bombs: [], explosions: [], powerups: [], hiddenItems: {}, dropCounts: {},
+            timer: 180, winner: null, winTimer: 0, frame: 0, freezeTimer: 0,
+            hurryUpSpiral: [], hurryUpIndex: 0, fallingBlocks: [], lastBombCount: 0, bgNeedsRedraw: true, boss: null
+          });
+
+          const toggleFullscreen = async () => {
+              try {
+                  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                      const docEl = document.documentElement;
+                      if (docEl.requestFullscreen) await docEl.requestFullscreen();
+                      else if (docEl.webkitRequestFullscreen) await docEl.webkitRequestFullscreen();
+                  } else {
+                      if (document.exitFullscreen) await document.exitFullscreen();
+                      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                  }
+              } catch (err) {}
+          };
+
+          useEffect(() => {
+              const onFsChange = () => { setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement)); };
+              document.addEventListener('fullscreenchange', onFsChange);
+              document.addEventListener('webkitfullscreenchange', onFsChange);
+              return () => {
+                  document.removeEventListener('fullscreenchange', onFsChange);
+                  document.removeEventListener('webkitfullscreenchange', onFsChange);
+              };
+          }, []);
+
+          useEffect(() => {
+            const handleKeyDown = (e) => {
+                const key = e.key.toLowerCase();
+                keys.current[key] = true;
+                if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'q'].includes(key)) {
+                    if (viewRef.current === 'playing') e.preventDefault();
+                }
+            };
+            const handleKeyUp = (e) => { keys.current[e.key.toLowerCase()] = false; };
+            window.addEventListener('keydown', handleKeyDown, { passive: false });
+            window.addEventListener('keyup', handleKeyUp);
+            return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+          }, []);
+
+          useEffect(() => {
+            if (!auth) return;
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                    else await signInAnonymously(auth);
+                } catch(e) {}
+            };
+            initAuth();
+            const unsub = onAuthStateChanged(auth, setUser);
+            return () => unsub();
+          }, []);
+
+          useEffect(() => {
+            viewRef.current = view;
+            if (canvasRef.current && (view === 'playing' || view === 'editor' || view === 'customize')) {
+              const ctx = canvasRef.current.getContext('2d', { alpha: false });
+              if(ctx) ctx.imageSmoothingEnabled = true; 
+              ctxRef.current = ctx;
+              
+              if (view === 'playing') {
+                  bgCanvasRef.current = document.createElement('canvas');
+                  bgCanvasRef.current.width = state.current.width * state.current.currentRes; 
+                  bgCanvasRef.current.height = state.current.height * state.current.currentRes;
+                  state.current.bgNeedsRedraw = true;
+              }
+            }
+          }, [view]);
+
+          useEffect(() => { customRef.current.color = uiColor; customRef.current.helmet = uiHelmet; }, [uiColor, uiHelmet]);
+
+          // 🔥 NETWORK SYNC EFFECTS
+          useEffect(() => {
+              if (!user || !db) return;
+              
+              if (view === 'online_setup') {
+                  const unsub = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), (snap) => {
+                      const rooms = [];
+                      snap.forEach(docSnap => {
+                          const data = docSnap.data();
+                          if (data.status === 'lobby' || data.status === 'playing') {
+                              rooms.push({ id: docSnap.id, ...data });
+                          }
+                      });
+                      setAvailableRooms(rooms.filter(r => r.status === 'lobby' && r.players?.length < 6));
+                  }, (err) => console.error(err));
+                  return () => unsub();
+              }
+
+              if (networkState === 'client' && roomId) {
+                  const unsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId), (docSnap) => {
+                      if (docSnap.exists()) {
+                          const data = docSnap.data();
+                          if (data.players) setLobbyPlayers(data.players);
+                          if (viewRef.current === 'lobby' && data.status === 'playing') {
+                              if (data.initialBoard) {
+                                  const parsedBoard = JSON.parse(data.initialBoard);
+                                  const resolvedMode = Object.values(GAME_MODES).find(m => m.id === data.config.mode) || GAME_MODES.CLASSIC;
+                                  initGame(resolvedMode, data.config.mapSize, data.config.mapTheme, true, parsedBoard, data.players);
+                              }
+                          }
+                          if (viewRef.current === 'playing' && data.gameState) {
+                              const parsed = JSON.parse(data.gameState);
+                              const myLocalPlayer = state.current.players.find(p => p.uid === user.uid);
+                              
+                              state.current.bombs = parsed.bombs;
+                              state.current.explosions = parsed.explosions;
+                              state.current.powerups = parsed.powerups;
+                              state.current.fallingBlocks = parsed.fallingBlocks;
+                              state.current.timer = parsed.timer;
+                              state.current.winner = parsed.winner;
+                              state.current.boss = parsed.boss;
+                              
+                              state.current.players = parsed.players.map(serverP => {
+                                  if (serverP.uid === user.uid && myLocalPlayer && serverP.alive) {
+                                      serverP.x = myLocalPlayer.x; serverP.y = myLocalPlayer.y;
+                                      serverP.dir = myLocalPlayer.dir; serverP.moving = myLocalPlayer.moving;
+                                  }
+                                  return serverP;
+                              });
+
+                              if (data.boardModifications) {
+                                  const mods = JSON.parse(data.boardModifications); let changed = false;
+                                  mods.forEach(m => { if (state.current.board[m.i] !== m.v) { state.current.board[m.i] = m.v; changed = true; } });
+                                  if (changed) state.current.bgNeedsRedraw = true;
+                              }
+                          }
+                      } else {
+                          setNetworkState('offline'); setView('menu');
+                      }
+                  }, (err) => console.error(err));
+                  return () => unsub();
+              }
+              
+              if (networkState === 'host' && roomId) {
+                  const unsubRoom = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId), (docSnap) => {
+                      if (docSnap.exists()) { const data = docSnap.data(); if (data.players) setLobbyPlayers(data.players); }
+                  }, (err) => console.error(err));
+
+                  const unsubInputs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `inputs_${roomId}`), (snap) => {
+                      snap.forEach(document => { const uid = document.id; if (uid !== user.uid) remoteInputsRef.current[uid] = document.data(); });
+                  }, (err) => console.error(err));
+
+                  return () => { unsubRoom(); unsubInputs(); };
+              }
+          }, [user, networkState, roomId, view]);
+
+          const createHostRoom = async () => {
+              if (!user || !db) return;
+              const newRoomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+              const initialPlayers = [{ uid: user.uid, name: 'P1' }];
+              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', newRoomId), {
+                  hostId: user.uid, status: 'lobby', config: { mode: selectedMode.id, mapSize, mapTheme }, players: initialPlayers
+              });
+              setRoomId(newRoomId); setLobbyPlayers(initialPlayers); setNetworkState('host'); setView('lobby');
+          };
+
+          const joinRoom = async (codeToJoin) => {
+              if (!user || !db || !codeToJoin) return;
+              const code = codeToJoin.toUpperCase();
+              const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+              const snap = await getDoc(roomRef);
+              if (snap.exists()) { 
+                  const data = snap.data();
+                  if (data.status === 'playing') { alert("Game already in progress!"); return; }
+                  if (data.players.length >= 6) { alert("Room is full!"); return; }
+                  
+                  if (!data.players.some(p => p.uid === user.uid)) {
+                      const newPlayers = [...data.players, { uid: user.uid, name: `P${data.players.length + 1}` }];
+                      await setDoc(roomRef, { players: newPlayers }, { merge: true });
+                  }
+                  setRoomId(code); setNetworkState('client'); setView('lobby'); 
+              } 
+              else { alert("Room not found!"); }
+          };
+
+          const leaveRoom = async () => {
+              if (!user || !db || !roomId) return;
+              if (networkState === 'host') {
+                  await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId));
+              } else if (networkState === 'client') {
+                  const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+                  const snap = await getDoc(roomRef);
+                  if (snap.exists()) {
+                      const newPlayers = snap.data().players.filter(p => p.uid !== user.uid);
+                      await setDoc(roomRef, { players: newPlayers }, { merge: true });
+                  }
+              }
+              setNetworkState('offline'); setRoomId(''); setView('online_setup');
+          };
+
+          const startNetworkGame = () => {
+              initGame(selectedMode, mapSize, mapTheme, true, null, lobbyPlayers);
+          };
+
+          const openEditor = () => {
+              const { cols, rows } = MAP_SIZES['MEDIUM'];
+              let board = new Array(rows * cols).fill(0);
+              for (let r = 0; r < rows; r++) {
+                  for (let c = 0; c < cols; c++) {
+                      if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) board[r * cols + c] = 1;
+                      else if (r % 2 === 0 && c % 2 === 0) board[r * cols + c] = 1;
+                  }
+              }
+              setEditorMap({ cols, rows, board });
+              setView('editor');
+          };
+
+          const handleEditorDraw = (e) => {
+              if (!editorMap || view !== 'editor') return;
+              const rect = canvasRef.current.getBoundingClientRect();
+              const scaleX = (editorMap.cols * TILE_SIZE) / rect.width; 
+              const scaleY = (editorMap.rows * TILE_SIZE) / rect.height;
+              const x = (e.clientX - rect.left) * scaleX; const y = (e.clientY - rect.top) * scaleY;
+              const c = Math.floor(x / TILE_SIZE); const r = Math.floor(y / TILE_SIZE);
+              
+              if (c>0 && c<editorMap.cols-1 && r>0 && r<editorMap.rows-1) {
+                  const newBoard = [...editorMap.board]; newBoard[r * editorMap.cols + c] = editorTool;
+                  setEditorMap({ ...editorMap, board: newBoard });
+              }
+          };
+
+          const renderEditor = () => {
+              const ctx = ctxRef.current;
+              if (!ctx || !editorMap) return;
+              const width = editorMap.cols * TILE_SIZE * RES;
+              const height = editorMap.rows * TILE_SIZE * RES;
+
+              ctx.save();
+              ctx.scale(RES, RES);
+              ctx.clearRect(0, 0, width, height);
+              Renderer.drawFloor(ctx, editorMap.cols, editorMap.rows, MAP_THEMES.CLASSIC);
+              
+              for (let r = 0; r < editorMap.rows; r++) {
+                  for (let c = 0; c < editorMap.cols; c++) {
+                      const t = editorMap.board[r * editorMap.cols + c];
+                      const isBoundary = (c === 0 || c === editorMap.cols - 1 || r === 0 || r === editorMap.rows - 1);
+                      if (t === 1) Renderer.drawHardBlock(ctx, c*TILE_SIZE, r*TILE_SIZE, isBoundary, MAP_THEMES.CLASSIC);
+                      else if (t === 2) Renderer.drawSoftBlock(ctx, c*TILE_SIZE, r*TILE_SIZE, MAP_THEMES.CLASSIC);
+                  }
+              }
+              
+              ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+              ctx.lineWidth = 1;
+              for (let r = 0; r <= editorMap.rows; r++) { ctx.beginPath(); ctx.moveTo(0, r*TILE_SIZE); ctx.lineTo(editorMap.cols*TILE_SIZE, r*TILE_SIZE); ctx.stroke(); }
+              for (let c = 0; c <= editorMap.cols; c++) { ctx.beginPath(); ctx.moveTo(c*TILE_SIZE, 0); ctx.lineTo(c*TILE_SIZE, editorMap.rows*TILE_SIZE); ctx.stroke(); }
+              ctx.restore();
+          };
+
+          const initGame = (mode, mapKey, themeKey, isNetworked = false, customBoard = null, networkPlayersList = []) => {
+            try {
+                Sfx.init(); Sfx.playUI(); Sfx.updateFuseSound(0); 
+                keys.current = {}; actionPrimaryBtn.current = false; actionSecondaryBtn.current = false; touchDpad.current = {x:0, y:0};
+                remoteInputsRef.current = {};
+
+                const mapDef = customBoard ? MAP_SIZES['CUSTOM'] : MAP_SIZES[mapKey];
+                const cols = mapDef.cols; const rows = mapDef.rows;
+                const theme = MAP_THEMES[themeKey];
+                GameJuice.particles = []; GameJuice.shockwaves = []; GameJuice.shakeIntensity = 0;
+                
+                let board = customBoard ? [...customBoard] : new Array(rows * cols).fill(0);
+                if (!customBoard) {
+                    for (let r = 0; r < rows; r++) {
+                      for (let c = 0; c < cols; c++) {
+                        if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) board[r * cols + c] = 1;
+                        else if (r % 2 === 0 && c % 2 === 0) board[r * cols + c] = 1;
+                      }
+                    }
+                }
+                
+                const getStartPos = (c, r) => {
+                    const midC = (Math.floor(c/2) % 2 === 0) ? Math.floor(c/2)+1 : Math.floor(c/2);
+                    return [
+                      { c: 1, r: 1 }, { c: c - 2, r: r - 2 }, { c: 1, r: r - 2 }, { c: c - 2, r: 1 },
+                      { c: midC, r: 1 }, { c: midC, r: r - 2 }
+                    ];
+                };
+                const startPos = getStartPos(cols, rows);
+                
+                if (!customBoard) {
+                    const safeZones = []; startPos.forEach(pos => safeZones.push([pos.c, pos.r], [pos.c+1, pos.r], [pos.c-1, pos.r], [pos.c, pos.r+1], [pos.c, pos.r-1]));
+                    for (let r = 1; r < rows - 1; r++) {
+                      for (let c = 1; c < cols - 1; c++) {
+                        if (board[r * cols + c] === 1) continue;
+                        if (!safeZones.some(z => z[0] === c && z[1] === r) && Math.random() < 0.85) board[r * cols + c] = 2; 
+                      }
+                    }
+                }
+
+                const crateIndices = []; for(let i=0; i<board.length; i++) if (board[i] === 2) crateIndices.push(i);
+                crateIndices.sort(() => Math.random() - 0.5);
+
+                const hiddenItems = {}; const pool = []; const add = (pu, qty) => { for(let i=0; i<qty; i++) pool.push(pu); }
+                
+                if (mode.id === 'mayhem') {
+                    add(POWERUPS.MEGA, 5); add(POWERUPS.DIRTY, 5); add(POWERUPS.GHOST, 5); add(POWERUPS.FREEZE, 5); add(POWERUPS.GLOVE, 5); add(POWERUPS.DINO, 6); add(POWERUPS.HORSE, 6); add(POWERUPS.MECH, 6); add(POWERUPS.DOLPHIN, 6);
+                } else if (mode.id === 'crazy') {
+                    add(POWERUPS.BOMB, 10); add(POWERUPS.FIRE, 10); add(POWERUPS.SPEED, 10); add(POWERUPS.DINO, 5); add(POWERUPS.MECH, 5); add(POWERUPS.HORSE, 5); add(POWERUPS.DOLPHIN, 5); add(POWERUPS.MEGA, 3);
+                } else if (mode.id === 'sniper') {
+                    add(POWERUPS.BOMB, 2); add(POWERUPS.SPEED, 10); add(POWERUPS.KICK, 5); add(POWERUPS.SHIELD, 3); add(POWERUPS.HORSE, 2);
+                } else {
+                    add(POWERUPS.BOMB, 16); add(POWERUPS.FIRE, 14); add(POWERUPS.SPEED, 10);
+                    if (mode.id !== 'easy') { add(POWERUPS.KICK, 2); add(POWERUPS.PUNCH, 1); add(POWERUPS.GLOVE, 2); }
+                    add(POWERUPS.MEGA, 2); add(POWERUPS.DIRTY, 2); add(POWERUPS.SHIELD, 2); add(POWERUPS.MAX_FIRE, 1);
+                    add(POWERUPS.GHOST, 1); add(POWERUPS.SKULL, 3); add(POWERUPS.HEART, 1); add(POWERUPS.FREEZE, 1); add(POWERUPS.MYSTERY, 2);
+                    add(POWERUPS.DINO, 3); add(POWERUPS.MECH, 2); add(POWERUPS.HORSE, 2); add(POWERUPS.DOLPHIN, 2);
+                }
+                
+                pool.sort(() => Math.random() - 0.5); pool.forEach(item => { if (crateIndices.length > 0) hiddenItems[crateIndices.pop()] = item; });
+
+                let spiral = []; let top = 1, bottom = rows-2, left = 1, right = cols-2;
+                while (top <= bottom && left <= right) {
+                    for (let c = left; c <= right; c++) spiral.push({c, r: top}); top++;
+                    for (let r = top; r <= bottom; r++) spiral.push({c: right, r}); right--;
+                    if (top <= bottom) { for (let c = right; c >= left; c--) spiral.push({c, r: bottom}); bottom--; }
+                    if (left <= right) { for (let r = bottom; r >= top; r--) spiral.push({c: left, r}); left++; }
+                }
+
+                const isSniper = mode.id === 'sniper';
+
+                const createPlayer = (id, isBot, idx, name, uid = null, team = null) => {
+                  let bColor = customRef.current.color; let lColor = customRef.current.limb; let pHelmet = customRef.current.helmet;
+                  if (mode.isTeam) {
+                      if (team === 1) { bColor = '#3B82F6'; lColor = '#93C5FD'; pHelmet = customRef.current.helmet; }
+                      else { bColor = '#EF4444'; lColor = '#FCA5A5'; pHelmet = 3; }
+                  } else if (isBot || idx > 0) {
+                      const pColor = PLAYER_COLORS[idx % PLAYER_COLORS.length];
+                      bColor = pColor.body; lColor = pColor.limb; pHelmet = [0,1,2,3,4,5][Math.floor(Math.random()*6)];
+                  }
+                  
+                  const sPos = startPos[idx] || { c: 1 + Math.floor(Math.random()*(cols-2)), r: 1 + Math.floor(Math.random()*(rows-2)) };
+
+                  return {
+                    id, uid, isBot, colorIdx: idx, alive: true, lives: mode.startLives, iFrames: 0,
+                    x: sPos.c*TILE_SIZE+TILE_SIZE/2, y: sPos.r*TILE_SIZE+TILE_SIZE/2, 
+                    z: 0, vz: 0, isDiving: 0, team, helmet: pHelmet, body: bColor, limb: lColor, visor: PLAYER_COLORS[idx % PLAYER_COLORS.length].visor,
+                    speed: isSniper ? 6.0 : (isBot ? 4.2 * mode.botSpeed : 4.8), maxBombs: 1, range: isSniper ? 15 : 1, mount: null,
+                    hasDirty: false, hasMega: false, hasKick: false, hasPunch: false, hasGlove: false, hasShield: false, isGhost: false,
+                    carriedBombId: null, skullTimer: 0, moving: false, dir: 'down', name, target: null, 
+                    lastBombReq: Date.now() + 500, lastSecReq: Date.now() + 500, botAggro: isBot ? 0.4 + Math.random() * 0.6 : 0, botTimer: isBot ? Math.random() * 100 : 0,
+                    botPersonality: isBot ? ['aggressive','tactical','erratic'][Math.floor(Math.random()*3)] : null
+                  };
+                };
+
+                const players = [];
+                let totalPlayersNeeded = isNetworked ? Math.max(networkPlayersList.length, playerCount) : playerCount;
+                totalPlayersNeeded = Math.min(totalPlayersNeeded, mapDef.max);
+
+                if (isNetworked) {
+                     networkPlayersList.forEach((lp, i) => {
+                         if (i >= mapDef.max) return;
+                         const team = mode.id === 'boss' ? 1 : (mode.isTeam ? (i%2)+1 : null);
+                         players.push(createPlayer(`p${i+1}`, false, i, lp.name, lp.uid, team));
+                     });
+                     for (let i = networkPlayersList.length; i < totalPlayersNeeded; i++) {
+                         const team = mode.id === 'boss' ? 1 : (mode.isTeam ? (i%2)+1 : null);
+                         players.push(createPlayer(`b${i+1}`, true, i, `BOT ${i}`, null, team));
+                     }
+                } else {
+                     const humanTeam = mode.id === 'boss' ? 1 : (mode.isTeam ? 1 : null);
+                     players.push(createPlayer('p1', false, 0, 'YOU', user?.uid, humanTeam));
+                     for (let i = 1; i < totalPlayersNeeded; i++) {
+                         const team = mode.id === 'boss' ? 1 : (mode.isTeam ? (i%2)+1 : null);
+                         players.push(createPlayer(`b${i}`, true, i, `BOT ${i}`, null, team));
+                     }
+                }
+
+                let boss = null;
+                if (mode.id === 'boss') boss = { active: true, x: (cols/2)*TILE_SIZE, y: (rows/2)*TILE_SIZE, vx: 0, vy: 0, hp: 50, maxHp: 50, state: 'chase', stateTimer: 0, speed: 2.0, targetId: null };
+
+                const cRes = Math.min(RES, Math.floor(MAX_CANVAS_DIMENSION / Math.max(cols * TILE_SIZE, rows * TILE_SIZE)));
+
+                state.current = {
+                  mode, cols, rows, width: cols * TILE_SIZE, height: rows * TILE_SIZE, theme, currentRes: cRes,
+                  board, players, bombs: [], explosions: [], powerups: [], hiddenItems, dropCounts: {},
+                  timer: mode.timer, winner: null, winTimer: 0, frame: 0, freezeTimer: 0,
+                  hurryUpSpiral: spiral, hurryUpIndex: 0, fallingBlocks: [], lastBombCount: 0, bgNeedsRedraw: true, boss
+                };
+                
+                lastTimeRef.current = 0; hitStopRef.current = 0; setView('playing');
+                
+                if (isNetworked && networkState === 'host' && roomId) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId), { 
+                        status: 'playing', 
+                        initialBoard: JSON.stringify(board),
+                        config: { mode: mode.id, mapSize: mapKey, mapTheme: themeKey } 
+                    }, {merge:true});
+                }
+            } catch(e) { console.error("Init Error:", e); }
+          };
+
+          const processDeath = (p) => {
+              const s = state.current;
+              if (p.mount) {
+                   p.mount = null; p.iFrames = 2000; p.hasPunch = false; p.hasKick = false; p.isDiving = 0; p.z = 0;
+                   GameJuice.emitText(p.x, p.y, "MOUNT DESTROYED!", "#F00"); Sfx.playShieldBreak(); return; 
+              }
+              p.lives--; Sfx.playDeath();
+              if (p.carriedBombId) { const b = s.bombs.find(bomb => bomb.id === p.carriedBombId); if (b) { b.carriedBy = null; b.z = 0; } p.carriedBombId = null; }
+
+              const scatter = [];
+              if (p.maxBombs > 1) scatter.push(POWERUPS.BOMB);
+              if (p.range > 1 && s.mode.id !== 'sniper') scatter.push(POWERUPS.FIRE);
+              if (p.speed > 5.0) scatter.push(POWERUPS.SPEED);
+              if (p.hasMega) scatter.push(POWERUPS.MEGA);
+              if (p.hasDirty) scatter.push(POWERUPS.DIRTY);
+              
+              scatter.slice(0, 10).forEach(type => {
+                  const angle = Math.random() * Math.PI * 2; const spd = 3 + Math.random() * 5;
+                  s.powerups.push({ id: `pu_${Math.random()}`, c: Math.floor(p.x/TILE_SIZE), r: Math.floor(p.y/TILE_SIZE), type, px: p.x, py: p.y, z: 20 + Math.random()*20, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, vz: 8 + Math.random()*6, isFlying: true });
+              });
+
+              if (p.lives <= 0) {
+                  p.alive = false; GameJuice.emitSparks(p.x, p.y, '#F00'); GameJuice.emitSmoke(p.x, p.y); GameJuice.emitText(p.x, p.y, "ELIMINATED!", "#F00");
+              } else {
+                  p.x = Math.max(TILE_SIZE*1.5, Math.min(s.width-TILE_SIZE*1.5, p.x)); p.y = Math.max(TILE_SIZE*1.5, Math.min(s.height-TILE_SIZE*1.5, p.y));
+                  p.iFrames = 2000; p.z = 0; p.isDiving = 0;
+                  p.maxBombs = Math.max(1, p.maxBombs - 1); p.range = s.mode.id === 'sniper' ? 15 : Math.max(1, p.range - 1);
+                  p.speed = Math.max(p.isBot ? (4.2 * s.mode.botSpeed) : 4.8, p.speed - 0.6);
+                  p.hasMega = false; p.hasDirty = false; p.isGhost = false; p.hasShield = false;
+                  GameJuice.emitText(p.x, p.y, "RESPAWNED!", "#FFF");
+              }
+          };
+
+          const triggerExplosion = (bomb) => {
+            if (bomb.exploded) return;
+            bomb.exploded = true; 
+            
+            const s = state.current; Sfx.playExplosion(bomb.isDirty, bomb.isMega, bomb.range);
+            GameJuice.triggerShake(bomb.isDirty ? 35 : (bomb.isMega ? 20 : 8));
+            if (bomb.carriedBy) { const carrier = s.players.find(p => p.id === bomb.carriedBy); if (carrier) carrier.carriedBombId = null; }
+            const isWalkableOrSoft = (c, r) => c > 0 && c < s.cols-1 && r > 0 && r < s.rows-1 && s.board[r * s.cols + c] !== 1;
+
+            const expandExplosion = (c, r, timer, isDirty, isMega) => {
+                if (!isWalkableOrSoft(c, r)) return;
+                if (s.boss && s.boss.active) {
+                    const bc = Math.floor(s.boss.x/TILE_SIZE); const br = Math.floor(s.boss.y/TILE_SIZE);
+                    if (c >= bc-1 && c <= bc+1 && r >= br-1 && r <= br+1) { s.boss.hp -= (isMega ? 5 : (isDirty ? 3 : 1)); GameJuice.emitSparks(s.boss.x, s.boss.y, '#FFF'); if (s.boss.hp <= 0) s.boss.active = false; }
+                }
+                s.explosions.push({ c, r, timer, maxTimer: timer, isDirty, isMega, owner: bomb.owner });
+                const puIndex = s.powerups.findIndex(p => p.c === c && p.r === r && !p.isFlying);
+                if (puIndex !== -1) { s.powerups.splice(puIndex, 1); GameJuice.emitSparks(c*TILE_SIZE+TILE_SIZE/2, r*TILE_SIZE+TILE_SIZE/2, '#FFF'); }
+                if (s.board[r * s.cols + c] === 2) { 
+                    s.board[r * s.cols + c] = 0; s.bgNeedsRedraw = true;
+                    GameJuice.emitDebris(c, r, s.theme.id); GameJuice.emitSmoke(c*TILE_SIZE+TILE_SIZE/2, r*TILE_SIZE+TILE_SIZE/2, '#8B4513');
+                    const dropType = s.hiddenItems[r * s.cols + c];
+                    if (dropType) { s.powerups.push({ id:`pu_${Math.random()}`, c, r, type: dropType, px: c*TILE_SIZE+TILE_SIZE/2, py: r*TILE_SIZE+TILE_SIZE/2, z:0, isFlying:false }); delete s.hiddenItems[r * s.cols + c]; }
+                }
+                const hitBomb = s.bombs.find(b => b.c === c && b.r === r && !b.isFlying && !b.carriedBy);
+                if (hitBomb && !hitBomb.exploded) triggerExplosion(hitBomb); 
+            };
+
+            GameJuice.emitShockwave(bomb.px, bomb.py, bomb.isDirty ? '#10B981' : (bomb.isMega ? '#D946EF' : '#F59E0B'));
+
+            if (bomb.isDirty) {
+               const rRad = Math.min(6, 3 + Math.floor(bomb.range / 2)); 
+               for(let r = -rRad; r <= rRad; r++) for(let c = -rRad; c <= rRad; c++) expandExplosion(bomb.c+c, bomb.r+r, 1200, true, false);
+            } else if (bomb.isMega) {
+               const rRad = Math.min(4, bomb.range); 
+               for(let r = -rRad; r <= rRad; r++) for(let c = -rRad; c <= rRad; c++) expandExplosion(bomb.c+c, bomb.r+r, 800, false, true);
+            } else {
+               expandExplosion(bomb.c, bomb.r, 500, false, false); const dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+               dirs.forEach(dir => { for (let i = 1; i <= bomb.range; i++) { const nc = bomb.c + dir.x * i; const nr = bomb.r + dir.y * i; if (s.board[nr * s.cols + nc] === 1) break; expandExplosion(nc, nr, 500, false, false); if (s.board[nr * s.cols + nc] === 2) break; } });
+            }
+          };
+
+          const handleBombDrop = (p) => {
+            const s = state.current;
+            if (!p.alive || p.iFrames > 0 || p.carriedBombId || p.z > 0 || p.isDiving > 0) return;
+            if (p.skullTimer > 0 && Math.random() < 0.3) return; 
+            const activeBombsCount = s.bombs.filter(b => b.owner === p.id && !b.exploded).length;
+            if (activeBombsCount >= p.maxBombs) return;
+
+            const myC = Math.floor(p.x / TILE_SIZE); const myR = Math.floor(p.y / TILE_SIZE);
+            if (s.bombs.some(b => b.c === myC && b.r === myR && !b.isFlying && !b.carriedBy)) return; 
+
+            const isFirstBomb = activeBombsCount === 0;
+            const isDirty = p.hasDirty && isFirstBomb; const isMega = p.hasMega && isFirstBomb && !isDirty;
+
+            s.bombs.push({
+              id: `b_${Math.random()}`, c: myC, r: myR, px: myC*TILE_SIZE + TILE_SIZE/2, py: myR*TILE_SIZE + TILE_SIZE/2,
+              range: p.range, owner: p.id, timer: 3000, dx: 0, dy: 0, isDirty: isDirty, isMega: isMega,
+              isFlying: false, carriedBy: null, z: 0, ignoredBy: [p.id], exploded: false
+            });
+            Sfx.playDrop();
+          };
+
+          const handleSecondaryAction = (p) => {
+              const s = state.current;
+              if (!p.alive || p.iFrames > 0 || p.isDiving > 0 || p.z > 0) return;
+
+              if (p.mount === 16) { 
+                  Sfx.playRoar(); let dx = 0, dy = 0;
+                  if (p.dir === 'up') dy = -1; else if (p.dir === 'down') dy = 1; else if (p.dir === 'left') dx = -1; else if (p.dir === 'right') dx = 1;
+                  const myC = Math.floor(p.x / TILE_SIZE); const myR = Math.floor(p.y / TILE_SIZE);
+                  for(let i=1; i<=3; i++) {
+                      const nc = myC + dx*i; const nr = myR + dy*i;
+                      if (nc<=0 || nc>=s.cols-1 || nr<=0 || nr>=s.rows-1 || s.board[nr*s.cols+nc] === 1) break;
+                      s.explosions.push({ c: nc, r: nr, timer: 400, maxTimer: 400, isDirty: false, isMega: false, owner: p.id });
+                      if (s.board[nr*s.cols+nc] === 2) {
+                          s.board[nr*s.cols+nc] = 0; s.bgNeedsRedraw = true; GameJuice.emitDebris(nc, nr, s.theme.id);
+                          const dropType = s.hiddenItems[nr*s.cols+nc];
+                          if(dropType) { s.powerups.push({ id:`pu_${Math.random()}`, c:nc, r:nr, type: dropType, px: nc*TILE_SIZE+TILE_SIZE/2, py: nr*TILE_SIZE+TILE_SIZE/2, z:0, isFlying:false }); delete s.hiddenItems[nr*s.cols+nc]; }
+                          break;
+                      }
+                  }
+                  return;
+              } else if (p.mount === 18) { 
+                  Sfx.playNeigh(); p.vz = 25; p.isFlying = true; p.flyDistance = 0; p.flyTargetDist = 2;
+                  let dx = 0, dy = 0;
+                  if (p.dir === 'up') dy = -1; else if (p.dir === 'down') dy = 1; else if (p.dir === 'left') dx = -1; else if (p.dir === 'right') dx = 1;
+                  p.flyDx = dx; p.flyDy = dy; return;
+              } else if (p.mount === 19) { 
+                  Sfx.playSplash(); p.isDiving = 2500; GameJuice.emitText(p.x, p.y-20, "DIVE!", "#0284C7"); return;
+              }
+
+              if (p.carriedBombId) {
+                  const bomb = s.bombs.find(b => b.id === p.carriedBombId);
+                  if (bomb) {
+                      p.carriedBombId = null; bomb.carriedBy = null; bomb.isFlying = true;
+                      let dx = 0, dy = 0;
+                      if (p.dir === 'up') dy = -1; else if (p.dir === 'down') dy = 1; else if (p.dir === 'left') dx = -1; else if (p.dir === 'right') dx = 1;
+                      bomb.dx = dx; bomb.dy = dy; bomb.px = p.x; bomb.py = p.y; bomb.c = Math.floor(p.x/TILE_SIZE); bomb.r = Math.floor(p.y/TILE_SIZE);
+                      bomb.flyDistance = 0; bomb.flyTargetDist = 3; Sfx.playDrop(); 
+                  }
+                  return;
+              }
+
+              const myC = Math.floor(p.x / TILE_SIZE); const myR = Math.floor(p.y / TILE_SIZE);
+              const bombUnderMe = s.bombs.find(b => b.c === myC && b.r === myR && b.dx === 0 && b.dy === 0 && !b.isFlying && !b.carriedBy);
+
+              if (p.hasGlove && bombUnderMe) { bombUnderMe.carriedBy = p.id; p.carriedBombId = bombUnderMe.id; return; }
+
+              if (p.hasPunch || p.mount === 17) {
+                 let tc = myC, tr = myR; let dx = 0, dy = 0;
+                 if (p.dir === 'up') { tr--; dy = -1; } else if (p.dir === 'down') { tr++; dy = 1; } else if (p.dir === 'left') { tc--; dx = -1; } else if (p.dir === 'right') { tc++; dx = 1; }
+                 const bomb = s.bombs.find(b => b.c === tc && b.r === tr && b.dx === 0 && b.dy === 0 && !b.isFlying && !b.carriedBy);
+                 if (bomb) { bomb.dx = dx; bomb.dy = dy; bomb.isFlying = true; bomb.flyDistance = 0; bomb.flyTargetDist = 3; Sfx.playDrop(); }
+              }
+          }
+
+          const updateEntities = (dt) => {
+            const s = state.current;
+            
+            if (s.frame % 60 === 0 && s.timer > 0) {
+                s.timer--;
+                const triggerTime = s.mode.id === 'blitz' ? 30 : 60; 
+                if (s.mode.suddenDeath && s.timer <= triggerTime && s.timer % 2 === 0 && s.hurryUpIndex < s.hurryUpSpiral.length) {
+                    const tile = s.hurryUpSpiral[s.hurryUpIndex]; s.fallingBlocks.push({ c: tile.c, r: tile.r, y: -400, timer: 30 }); s.hurryUpIndex++;
+                }
+            }
+
+            if (s.freezeTimer > 0) s.freezeTimer -= dt;
+
+            s.players.forEach(p => { 
+                if (p.iFrames > 0) p.iFrames -= dt; 
+                if (p.isDiving > 0) p.isDiving -= dt;
+                if (p.z > 0 || p.isFlying) {
+                    const speed = 25 * (dt/16);
+                    p.x += p.flyDx * speed; p.y += p.flyDy * speed; p.flyDistance += speed;
+                    const distRatio = p.flyDistance / (p.flyTargetDist * TILE_SIZE);
+                    p.z = Math.sin(Math.PI * Math.min(1, distRatio)) * 50; 
+
+                    if (p.flyDistance >= p.flyTargetDist * TILE_SIZE) {
+                        const landC = Math.floor(p.x / TILE_SIZE); const landR = Math.floor(p.y / TILE_SIZE);
+                        if (landC <= 0 || landC >= s.cols-1 || landR <= 0 || landR >= s.rows-1 || s.board[landR * s.cols + landC] !== 0) {
+                            p.flyDx *= -1; p.flyDy *= -1; p.flyTargetDist = 1; p.flyDistance = 0;
+                        } else {
+                            p.isFlying = false; p.z = 0; p.x = landC * TILE_SIZE + TILE_SIZE/2; p.y = landR * TILE_SIZE + TILE_SIZE/2; Sfx.playDrop();
+                        }
+                    }
+                }
+            });
+
+            if (s.boss && s.boss.active) {
+                let b = s.boss; b.stateTimer -= dt;
+                const bc = Math.floor(b.x/TILE_SIZE); const br = Math.floor(b.y/TILE_SIZE);
+                [[0,0],[1,0],[0,1],[1,1]].forEach(d => {
+                     const idx = (br+d.r)*s.cols + (bc+d.c);
+                     if (s.board[idx] === 2) { s.board[idx] = 0; s.bgNeedsRedraw = true; GameJuice.emitDebris(bc+d.c, br+d.r, s.theme.id); Sfx.playDrop(); }
+                });
+
+                if (b.state === 'chase') {
+                    if (!b.targetId || Math.random() < 0.05) { const alive = s.players.filter(p=>p.alive); if (alive.length > 0) b.targetId = alive[Math.floor(Math.random()*alive.length)].id; }
+                    const targetP = s.players.find(p=>p.id===b.targetId && p.alive);
+                    if (targetP) {
+                        const dx = targetP.x - b.x; const dy = targetP.y - b.y; const mag = Math.hypot(dx, dy);
+                        if (mag > 0) {
+                            const nx = b.x + (dx/mag)*b.speed*(dt/16); const ny = b.y + (dy/mag)*b.speed*(dt/16);
+                            const nC = Math.floor(nx/TILE_SIZE); const nR = Math.floor(ny/TILE_SIZE);
+                            if (s.board[nR*s.cols+nC] !== 1 && s.board[(nR+1)*s.cols+(nC+1)] !== 1) { b.x = nx; b.y = ny; }
+                        }
+                    }
+                    if (b.stateTimer <= 0) { b.state = 'charge_laser'; b.stateTimer = 2000; Sfx.playBossWarn(); GameJuice.triggerShake(5); }
+                } else if (b.state === 'charge_laser') {
+                    if (b.stateTimer <= 0) {
+                        b.state = 'laser'; b.stateTimer = 500; Sfx.playExplosion(false, true, 15); GameJuice.triggerShake(20);
+                        for(let c=1; c<s.cols-1; c++) { if (s.board[br*s.cols+c]!==1) s.explosions.push({c, r:br, timer:500, maxTimer:500, isDirty:false, isMega:true}); }
+                        for(let r=1; r<s.rows-1; r++) { if (s.board[r*s.cols+bc]!==1) s.explosions.push({c:bc, r, timer:500, maxTimer:500, isDirty:false, isMega:true}); }
+                    }
+                } else if (b.state === 'laser') {
+                    if (b.stateTimer <= 0) { b.state = 'chase'; b.stateTimer = 5000 + Math.random()*3000; }
+                }
+                s.players.forEach(p => { if (p.alive && p.iFrames <= 0 && p.isDiving <= 0 && p.z <= 0 && Math.abs(p.x - b.x) < 40 && Math.abs(p.y - b.y) < 40) processDeath(p); });
+            }
+
+            s.powerups.forEach(pu => {
+                if (pu.isFlying) {
+                    pu.px += pu.vx * (dt/16); pu.py += pu.vy * (dt/16); pu.z += pu.vz * (dt/16); pu.vz -= 0.8 * (dt/16); 
+                    if (pu.z <= 0) {
+                        pu.z = 0; pu.vz *= -0.5; pu.vx *= 0.6; pu.vy *= 0.6;
+                        if (Math.abs(pu.vz) < 1 && Math.abs(pu.vx) < 1 && Math.abs(pu.vy) < 1) {
+                            pu.isFlying = false;
+                            let c = Math.max(1, Math.min(s.cols-2, Math.round(pu.px / TILE_SIZE)));
+                            let r = Math.max(1, Math.min(s.rows-2, Math.round(pu.py / TILE_SIZE)));
+                            
+                            let found = false;
+                            for (let radius = 0; radius < 5 && !found; radius++) {
+                                for (let dr = -radius; dr <= radius; dr++) {
+                                    for (let dc = -radius; dc <= radius; dc++) {
+                                        let tc = c + dc; let tr = r + dr;
+                                        if (tc > 0 && tc < s.cols-1 && tr > 0 && tr < s.rows-1) {
+                                            if (s.board[tr * s.cols + tc] === 0) {
+                                                c = tc; r = tr; found = true; break;
+                                            }
+                                        }
+                                    }
+                                    if(found) break;
+                                }
+                            }
+                            pu.c = c; pu.r = r;
+                            pu.px = c * TILE_SIZE + TILE_SIZE/2; pu.py = r * TILE_SIZE + TILE_SIZE/2;
+                        }
+                    }
+                }
+            });
+
+            for (let i=s.fallingBlocks.length-1; i>=0; i--) {
+                let b = s.fallingBlocks[i]; b.timer -= dt/16; b.y += 18;
+                if (b.y >= 0) {
+                    s.board[b.r * s.cols + b.c] = 1; s.bgNeedsRedraw = true; 
+                    GameJuice.emitDebris(b.c, b.r, s.theme.id); GameJuice.emitSmoke(b.c*TILE_SIZE+TILE_SIZE/2, b.r*TILE_SIZE+TILE_SIZE/2);
+                    Sfx.playDrop();
+                    s.players.forEach(p => { if (p.alive && Math.floor(p.x/TILE_SIZE)===b.c && Math.floor(p.y/TILE_SIZE)===b.r) processDeath(p); });
+                    s.bombs.filter(bm=>bm.c===b.c && bm.r===b.r).forEach(bm => triggerExplosion(bm));
+                    GameJuice.triggerShake(15); s.fallingBlocks.splice(i,1);
+                }
+            }
+
+            for (let i = s.bombs.length - 1; i >= 0; i--) {
+              const b = s.bombs[i]; 
+
+              if (b.ignoredBy && b.ignoredBy.length > 0) {
+                  b.ignoredBy = b.ignoredBy.filter(pid => {
+                      const p = s.players.find(pl => pl.id === pid);
+                      if (!p || !p.alive) return false;
+                      const pLeft = p.x - 12; const pRight = p.x + 12; const pTop = p.y - 12; const pBottom = p.y + 12;
+                      const bLeft = b.c*TILE_SIZE; const bRight = bLeft+TILE_SIZE; const bTop = b.r*TILE_SIZE; const bBottom = bTop+TILE_SIZE;
+                      return !(pLeft >= bRight || pRight <= bLeft || pTop >= bBottom || pBottom <= bTop);
+                  });
+              }
+
+              if (b.carriedBy) {
+                  const carrier = s.players.find(p => p.id === b.carriedBy);
+                  if (carrier && carrier.alive) {
+                      b.px = carrier.x; b.py = carrier.y; b.z = 36; b.c = Math.floor(b.px / TILE_SIZE); b.r = Math.floor(b.py / TILE_SIZE);
+                      continue; 
+                  } else { b.carriedBy = null; b.z = 0; }
+              }
+
+              b.timer -= dt;
+
+              if (b.dx !== 0 || b.dy !== 0) {
+                  const speed = 18 * (dt/16);
+                  if (b.isFlying) {
+                      b.px += b.dx * speed; b.py += b.dy * speed; b.flyDistance += speed;
+                      
+                      if (b.px < 0) b.px += s.cols * TILE_SIZE;
+                      if (b.px >= s.cols * TILE_SIZE) b.px -= s.cols * TILE_SIZE;
+                      if (b.py < 0) b.py += s.rows * TILE_SIZE;
+                      if (b.py >= s.rows * TILE_SIZE) b.py -= s.rows * TILE_SIZE;
+
+                      const distRatio = b.flyDistance / (b.flyTargetDist * TILE_SIZE);
+                      b.z = Math.sin(Math.PI * Math.min(1, distRatio)) * 40; 
+                      
+                      if (b.flyDistance >= b.flyTargetDist * TILE_SIZE) {
+                          let landC = Math.floor(b.px / TILE_SIZE);
+                          let landR = Math.floor(b.py / TILE_SIZE);
+
+                          landC = (landC + s.cols) % s.cols; 
+                          landR = (landR + s.rows) % s.rows;
+
+                          b.px = landC * TILE_SIZE + TILE_SIZE/2; 
+                          b.py = landR * TILE_SIZE + TILE_SIZE/2;
+                          b.c = landC; 
+                          b.r = landR;
+
+                          const isWall = s.board[landR * s.cols + landC] !== 0;
+                          const hasBomb = s.bombs.some(ob => ob.id !== b.id && ob.c === landC && ob.r === landR && !ob.carriedBy);
+                          
+                          if (isWall || hasBomb) { 
+                              b.flyTargetDist = 1; b.flyDistance = 0; 
+                          } else { 
+                              b.isFlying = false; b.dx = 0; b.dy = 0; b.z = 0; 
+                          }
+                      }
+                  } else {
+                      let nx = b.px + b.dx * speed; let ny = b.py + b.dy * speed; b.z = 0;
+                      const margin = 12; const left = nx - margin, right = nx + margin, top = ny - margin, bottom = ny + margin; let blocked = false;
+                      for (let r = Math.floor(top/TILE_SIZE); r <= Math.floor(bottom/TILE_SIZE); r++) {
+                         for (let c = Math.floor(left/TILE_SIZE); c <= Math.floor(right/TILE_SIZE); c++) {
+                             if (s.board[r * s.cols + c] !== 0) blocked = true;
+                             if (s.bombs.some(ob => ob.id !== b.id && ob.c === c && ob.r === r && !ob.isFlying && !ob.carriedBy)) blocked = true;
+                             if (s.players.some(p => p.alive && p.z <= 0 && Math.abs(p.x - nx)<30 && Math.abs(p.y - ny)<30 && Math.abs(p.x - b.px) >= 30)) blocked = true;
+                         }
+                      }
+                      if (blocked) { b.dx = 0; b.dy = 0; b.px = b.c * TILE_SIZE + TILE_SIZE/2; b.py = b.r * TILE_SIZE + TILE_SIZE/2; } 
+                      else { b.px = nx; b.py = ny; b.c = Math.floor(b.px / TILE_SIZE); b.r = Math.floor(b.py / TILE_SIZE); }
+                  }
+              }
+
+              if (b.timer <= 0 && !b.exploded) triggerExplosion(b);
+            }
+            
+            s.bombs = s.bombs.filter(b => !b.exploded);
+
+            const activeBombsCount = s.bombs.filter(b => b.timer > 0 && !b.isFlying).length;
+            if (activeBombsCount !== s.lastBombCount) { Sfx.updateFuseSound(activeBombsCount); s.lastBombCount = activeBombsCount; }
+
+            for (let i = s.explosions.length - 1; i >= 0; i--) {
+              const e = s.explosions[i]; e.timer -= dt;
+              if (e.timer <= 0) {
+                  s.explosions.splice(i, 1);
+              } else {
+                  const ex = e.c * TILE_SIZE + TILE_SIZE/2; const ey = e.r * TILE_SIZE + TILE_SIZE/2;
+                  s.players.forEach(p => {
+                      if (!p.alive || p.iFrames > 0 || p.isDiving > 0 || p.z > 0) return; 
+                      if (Math.abs(p.x - ex) < TILE_SIZE * 0.65 && Math.abs(p.y - ey) < TILE_SIZE * 0.65) {
+                          if (p.hasShield) { p.hasShield = false; p.iFrames = 1000; Sfx.playShieldBreak(); GameJuice.emitText(p.x, p.y, "SHIELD BROKEN!", "#00FFFF"); } 
+                          else { processDeath(p); hitStopRef.current = 80; }
+                      }
+                  });
+                  if (Math.random() > 0.96) { GameJuice.emitSmoke(ex, ey, e.isDirty ? '#064E3B' : '#444'); }
+              }
+            }
+          };
+
+          const updateBots = (dt) => {
+            const s = state.current;
+            if (s.freezeTimer > 0) return; 
+
+            const dangerMap = BotAI.buildDangerMap(s);
+
+            s.players.filter(p => p.isBot && p.alive && p.iFrames <= 0 && p.z <= 0 && p.isDiving <= 0).forEach(bot => {
+                if (bot.skullTimer > 0) { bot.skullTimer -= dt; if (Math.random() < 0.1) bot.dir = ['up','down','left','right'][Math.floor(Math.random()*4)]; }
+                
+                if (bot.mount && Math.random() < 0.02) { handleSecondaryAction(bot); return; }
+                if (bot.carriedBombId) { handleSecondaryAction(bot); return; }
+
+                const myC = Math.floor(bot.x / TILE_SIZE); const myR = Math.floor(bot.y / TILE_SIZE);
+                const inDanger = dangerMap[myR * s.cols + myC] > 0;
+
+                if (inDanger) {
+                     const escapePath = BotAI.bfsFindPath(myC, myR, (c,r) => dangerMap[r*s.cols+c] === 0, dangerMap, s, bot, 40, true);
+                     if (escapePath && escapePath.length > 0) { bot.target = escapePath[0]; movePlayerTowards(bot, bot.target.c, bot.target.r, dt); } 
+                     else { bot.target = null; bot.moving = false; }
+                     return;
+                }
+
+                bot.botTimer = (bot.botTimer || 0) - dt; 
+                if (bot.botTimer > 0) {
+                    if (bot.target && dangerMap[bot.target.r * s.cols + bot.target.c] === 0) { movePlayerTowards(bot, bot.target.c, bot.target.r, dt); return; } 
+                    else { bot.botTimer = 0; }
+                }
+                bot.botTimer = 60 + Math.random() * 60; 
+
+                let aliveEnemies = s.players.filter(p => p.alive && p.id !== bot.id && (!s.mode.isTeam || p.team !== bot.team));
+                
+                if (bot.botPersonality === 'aggressive') aliveEnemies.sort((a,b) => Math.hypot(a.x-bot.x, a.y-bot.y) - Math.hypot(b.x-bot.x, b.y-bot.y));
+                else if (bot.botPersonality === 'erratic') aliveEnemies.sort(() => Math.random() - 0.5);
+
+                const enemyVeryNear = aliveEnemies.some(p => Math.abs(Math.floor(p.x/TILE_SIZE)-myC) + Math.abs(Math.floor(p.y/TILE_SIZE)-myR) <= 2);
+                
+                if (enemyVeryNear && Math.random() < 0.2 && bot.botPersonality !== 'aggressive') {
+                     const dirs = [{c:0,r:1},{c:0,r:-1},{c:1,r:0},{c:-1,r:0}].sort(() => Math.random() - 0.5);
+                     for(let d of dirs) {
+                         if (BotAI.getWalkable(myC+d.c, myR+d.r, s, bot, myC, myR) && dangerMap[(myR+d.r)*s.cols+(myC+d.c)] === 0) { bot.target = {c: myC+d.c, r: myR+d.r}; return; }
+                     }
+                }
+
+                const isAdjacentToSoft = [[0,1],[0,-1],[1,0],[-1,0]].some(([dc,dr]) => {
+                    const tC = myC+dc, tR = myR+dr; return tC>0 && tC<s.cols && tR>0 && tR<s.rows && s.board[tR*s.cols+tC] === 2;
+                });
+                
+                const enemyInBlast = aliveEnemies.some(p => {
+                    const eC = Math.floor(p.x/TILE_SIZE); const eR = Math.floor(p.y/TILE_SIZE);
+                    if (myC !== eC && myR !== eR) return false; 
+                    const dist = Math.abs(myC - eC) + Math.abs(myR - eR); if (dist > bot.range) return false;
+                    const dx = Math.sign(eC - myC); const dy = Math.sign(eR - myR);
+                    for (let i = 1; i < dist; i++) { if (s.board[(myR + dy*i)*s.cols + (myC + dx*i)] !== 0) return false; }
+                    return true;
+                });
+
+                if (s.boss && s.boss.active && Math.random() < 0.5) {
+                     const bC = Math.floor(s.boss.x/TILE_SIZE); const bR = Math.floor(s.boss.y/TILE_SIZE);
+                     if (Math.abs(myC - bC) < 3 && Math.abs(myR - bR) < 3) {
+                         if (BotAI.isSafeToDropBomb(bot, s)) { handleBombDrop(bot); bot.target = null; bot.botTimer = 0; return; }
+                     }
+                }
+
+                if ((isAdjacentToSoft || enemyInBlast || (enemyVeryNear && Math.random() < 0.4)) && Math.random() < bot.botAggro) {
+                    if (BotAI.isSafeToDropBomb(bot, s)) { handleBombDrop(bot); bot.target = null; bot.botTimer = 0; return; }
+                }
+
+                let path = BotAI.bfsFindPath(myC, myR, (c,r) => {
+                    if (s.powerups.some(pu => pu.c === c && pu.r === r && !pu.isFlying)) return true;
+                    const hasLosToEnemy = aliveEnemies.some(p => {
+                        const eC = Math.floor(p.x/TILE_SIZE); const eR = Math.floor(p.y/TILE_SIZE);
+                        if (c !== eC && r !== eR) return false;
+                        const dist = Math.abs(c - eC) + Math.abs(r - eR); if (dist > bot.range) return false;
+                        const dx = Math.sign(eC - c); const dy = Math.sign(eR - r);
+                        for (let i = 1; i <= dist; i++) {
+                            const checkC = c + dx*i; const checkR = r + dy*i;
+                            if (checkC === eC && checkR === eR) return true; 
+                            if (s.board[checkR*s.cols + checkC] !== 0) return false; 
+                        }
+                        return true;
+                    });
+                    return hasLosToEnemy && BotAI.isSafeToDropBombAt(c, r, bot, s);
+                }, dangerMap, s, bot, 60);
+
+                if (!path) {
+                    path = BotAI.bfsFindPath(myC, myR, (c,r) => {
+                        const isAdj = [[0,1],[0,-1],[1,0],[-1,0]].some(([dc,dr]) => {
+                            const tC = c+dc, tR = r+dr; return tC>0 && tC<s.cols && tR>0 && tR<s.rows && s.board[tR*s.cols+tC] === 2;
+                        });
+                        return isAdj && BotAI.isSafeToDropBombAt(c, r, bot, s);
+                    }, dangerMap, s, bot, 40);
+
+                    if (!path) path = BotAI.bfsFindPath(myC, myR, (c,r) => {
+                            return [[0,1],[0,-1],[1,0],[-1,0]].some(([dc,dr]) => {
+                                const tC = c+dc, tR = r+dr; return tC>0 && tC<s.cols && tR>0 && tR<s.rows && s.board[tR*s.cols+tC] === 2;
+                            });
+                    }, dangerMap, s, bot, 30);
+                }
+
+                if (path && path.length > 0) { bot.target = path[0]; movePlayerTowards(bot, bot.target.c, bot.target.r, dt); } 
+                else { 
+                    bot.target = null; const targetX = myC * TILE_SIZE + TILE_SIZE/2; const targetY = myR * TILE_SIZE + TILE_SIZE/2;
+                    if (Math.abs(bot.x - targetX) > 1 || Math.abs(bot.y - targetY) > 1) { bot.moving = true; bot.x += (targetX - bot.x) * 0.3; bot.y += (targetY - bot.y) * 0.3; } 
+                    else { bot.moving = false; bot.x = targetX; bot.y = targetY; }
+                }
+            });
+          };
+
+          const movePlayerTowards = (p, tc, tr, dt) => {
+              if (p.z > 0 || p.isFlying) return;
+              const targetX = tc * TILE_SIZE + TILE_SIZE/2; const targetY = tr * TILE_SIZE + TILE_SIZE/2;
+              let dx = targetX - p.x; let dy = targetY - p.y;
+              
+              const speedMod = (p.skullTimer > 0 ? (Math.random() > 0.5 ? 0.4 : 1.6) : 1.0) * (p.isDiving > 0 ? 2.0 : 1.0);
+              const moveAmt = (p.speed * speedMod) * (dt/16);
+              
+              if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                  p.moving = true;
+                  if (Math.abs(dx) > moveAmt) p.x += Math.sign(dx) * moveAmt; else p.x = targetX;
+                  if (Math.abs(dy) > moveAmt) p.y += Math.sign(dy) * moveAmt; else p.y = targetY;
+                  p.dir = Math.abs(dx)>Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
+
+                  if (p.isDiving <= 0) GameJuice.emitDust(p.x, p.y);
+
+                  if (p.hasKick || p.mount === 17) {
+                     const s = state.current;
+                     const myC = Math.floor(p.x/TILE_SIZE); const myR = Math.floor(p.y/TILE_SIZE);
+                     const hitBomb = s.bombs.find(b => b.c===myC && b.r===myR && b.dx===0 && b.dy===0 && !b.isFlying && !b.carriedBy && !b.ignoredBy?.includes(p.id));
+                     if (hitBomb) {
+                         if (Math.abs(dx) > Math.abs(dy)) { hitBomb.dx = dx > 0 ? 1 : -1; hitBomb.dy = 0; }
+                         else { hitBomb.dy = dy > 0 ? 1 : -1; hitBomb.dx = 0; }
+                         Sfx.playDrop(); 
+                     }
+                  }
+              } else { p.moving = false; p.x = targetX; p.y = targetY; }
+          };
+
+          const handlePlayerInput = (dt) => {
+            const s = state.current; 
+            let p;
+            if (networkState === 'client') { p = s.players.find(pl => pl.uid === user?.uid) || s.players[0]; } else { p = s.players[0]; }
+            
+            if (!p || !p.alive || s.freezeTimer > 0 || p.isFlying || p.z > 0) return; 
+
+            if (p.skullTimer > 0) p.skullTimer -= dt;
+
+            let kx = 0, ky = 0;
+            if (keys.current['w'] || keys.current['arrowup'] || touchDpad.current.y === -1) ky -= 1;
+            if (keys.current['s'] || keys.current['arrowdown'] || touchDpad.current.y === 1) ky += 1;
+            if (keys.current['a'] || keys.current['arrowleft'] || touchDpad.current.x === -1) kx -= 1;
+            if (keys.current['d'] || keys.current['arrowright'] || touchDpad.current.x === 1) kx += 1;
+            
+            if (p.skullTimer > 0 && Math.floor(p.skullTimer / 1000) % 2 === 0) { kx = -kx; ky = -ky; }
+
+            if (kx !== 0 && ky === 0) { const targetY = Math.floor(p.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2; p.y += (targetY - p.y) * 0.2; }
+            if (ky !== 0 && kx === 0) { const targetX = Math.floor(p.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2; p.x += (targetX - p.x) * 0.2; }
+            if (kx !== 0 && ky !== 0) { kx *= 0.707; ky *= 0.707; }
+
+            const speedMod = (p.skullTimer > 0 ? 0.6 : 1.0) * (p.isDiving > 0 ? 2.0 : 1.0);
+            const moveX = kx * (p.speed * speedMod) * (dt/16); const moveY = ky * (p.speed * speedMod) * (dt/16);
+
+            p.moving = (kx !== 0 || ky !== 0);
+            if (ky < 0) p.dir = 'up'; else if (ky > 0) p.dir = 'down'; else if (kx < 0) p.dir = 'left'; else if (kx > 0) p.dir = 'right';
+            if (p.moving && p.isDiving <= 0) GameJuice.emitDust(p.x, p.y);
+
+            const pSize = 24; let newX = p.x + moveX; let newY = p.y + moveY;
+
+            const checkCollision = (nx, ny) => {
+              const left = nx - pSize/2, right = nx + pSize/2, top = ny - pSize/2, bottom = ny + pSize/2;
+              for (let r = Math.floor(top/TILE_SIZE); r <= Math.floor(bottom/TILE_SIZE); r++) {
+                for (let c = Math.floor(left/TILE_SIZE); c <= Math.floor(right/TILE_SIZE); c++) {
+                  if (s.board[r * s.cols + c] === 1) return true;
+                  if (!p.isGhost && p.isDiving <= 0 && s.board[r * s.cols + c] === 2) return true;
+                  
+                  if (s.boss && s.boss.active) {
+                     const bC = Math.floor(s.boss.x/TILE_SIZE); const bR = Math.floor(s.boss.y/TILE_SIZE);
+                     if (c >= bC && c <= bC+1 && r >= bR && r <= bR+1) return true; 
+                  }
+
+                  const solidBomb = s.bombs.find(ob => ob.c === c && ob.r === r && !ob.isFlying && !ob.carriedBy);
+                  if (solidBomb && p.isDiving <= 0) {
+                     if (solidBomb.ignoredBy?.includes(p.id)) continue; 
+                     if ((p.hasKick || p.mount === 17) && p.moving && solidBomb.dx===0 && solidBomb.dy===0) {
+                        if (Math.abs(kx) > 0 && Math.abs(ny - solidBomb.py) < 15) { solidBomb.dx = kx > 0 ? 1 : -1; solidBomb.dy = 0; Sfx.playDrop(); }
+                        else if (Math.abs(ky) > 0 && Math.abs(nx - solidBomb.px) < 15) { solidBomb.dy = ky > 0 ? 1 : -1; solidBomb.dx = 0; Sfx.playDrop(); }
+                     }
+                     return true; 
+                  }
+                }
+              }
+              return false;
+            };
+
+            const slideOff = 18; 
+            if (moveX !== 0) {
+              if (!checkCollision(newX, p.y)) p.x = newX;
+              else if (!checkCollision(newX, p.y - slideOff)) p.y -= (p.speed*speedMod)*(dt/16);
+              else if (!checkCollision(newX, p.y + slideOff)) p.y += (p.speed*speedMod)*(dt/16);
+            }
+            if (moveY !== 0) {
+              if (!checkCollision(p.x, newY)) p.y = newY;
+              else if (!checkCollision(p.x - slideOff, newY)) p.x -= (p.speed*speedMod)*(dt/16);
+              else if (!checkCollision(p.x + slideOff, newY)) p.x += (p.speed*speedMod)*(dt/16);
+            }
+            
+            p.x = Math.max(pSize/2, Math.min(s.width - pSize/2, p.x));
+            p.y = Math.max(pSize/2, Math.min(s.height - pSize/2, p.y));
+
+            if (networkState === 'client' && user) {
+                if ((keys.current[' '] || actionPrimaryBtn.current) && (!p.lastBombReq || Date.now() - p.lastBombReq > 200)) {
+                   setDoc(doc(db, 'artifacts', appId, 'public', 'data', `inputs_${roomId}`, user.uid), { action: 'bomb', t: Date.now() }, {merge:true});
+                   p.lastBombReq = Date.now(); keys.current[' '] = false; actionPrimaryBtn.current = false;
+                }
+                if ((keys.current.q || actionSecondaryBtn.current) && (!p.lastSecReq || Date.now() - p.lastSecReq > 250)) {
+                   setDoc(doc(db, 'artifacts', appId, 'public', 'data', `inputs_${roomId}`, user.uid), { action: 'special', t: Date.now() }, {merge:true});
+                   p.lastSecReq = Date.now(); keys.current.q = false; actionSecondaryBtn.current = false;
+                }
+                if (p.moving && Date.now() - p.lastSync > 80) {
+                     setDoc(doc(db, 'artifacts', appId, 'public', 'data', `inputs_${roomId}`, user.uid), { x: p.x, y: p.y, dir: p.dir }, {merge:true});
+                     p.lastSync = Date.now();
+                }
+                return; 
+            }
+
+            if ((keys.current[' '] || actionPrimaryBtn.current) && (!p.lastBombReq || Date.now() - p.lastBombReq > 200)) {
+               handleBombDrop(p); p.lastBombReq = Date.now(); keys.current[' '] = false; actionPrimaryBtn.current = false;
+            }
+            if ((keys.current.q || actionSecondaryBtn.current) && (!p.lastSecReq || Date.now() - p.lastSecReq > 250)) {
+               handleSecondaryAction(p); p.lastSecReq = Date.now(); keys.current.q = false; actionSecondaryBtn.current = false;
+            }
+          };
+
+          const handleItemCollection = () => {
+             const s = state.current;
+             s.players.forEach(p => {
+                 if(!p.alive || p.iFrames > 0 || p.z > 0) return;
+                 for (let i = s.powerups.length - 1; i >= 0; i--) {
+                    const pu = s.powerups[i];
+                    if (!pu.isFlying && Math.hypot(p.x - pu.px, p.y - pu.py) < 30) { 
+                        let effect = pu.type;
+                        if (effect.id === 15) effect = Object.values(POWERUPS)[Math.floor(Math.random()*16)];
+                        let audioIntensity = 1;
+
+                        switch(effect.id) {
+                          case 1: p.maxBombs = Math.min(10, p.maxBombs + 1); audioIntensity = p.maxBombs; break;
+                          case 2: p.range = Math.min(12, p.range + 1); audioIntensity = p.range; break;
+                          case 3: p.speed = Math.min(9.0, p.speed + 0.6); audioIntensity = p.speed; break;
+                          case 4: p.hasKick = true; break;
+                          case 5: p.hasPunch = true; break;
+                          case 6: p.hasMega = true; p.hasDirty = false; break;
+                          case 7: p.hasDirty = true; p.hasMega = false; break;
+                          case 8: p.skullTimer = 8000; break;
+                          case 9: p.hasShield = true; break;
+                          case 10: p.isGhost = true; break;
+                          case 11: p.hasGlove = true; break; 
+                          case 12: p.range = 15; audioIntensity = 15; break;
+                          case 13: p.lives++; break;
+                          case 14: s.players.forEach(op => { if(op.id !== p.id && (!s.mode.isTeam || op.team !== p.team)) op.freezeTimer = 4000; }); break;
+                          case 16: p.mount = 16; break; 
+                          case 17: p.mount = 17; p.hasPunch = true; p.hasKick = true; break; 
+                          case 18: p.mount = 18; break; 
+                          case 19: p.mount = 19; break; 
+                        }
+                        
+                        Sfx.playPowerup(effect.id, audioIntensity); 
+                        GameJuice.emitText(p.x, p.y-20, effect.text, effect.bg);
+                        s.powerups.splice(i, 1);
+                    }
+                 }
+             });
+          };
+
+          const renderGame = () => {
+            const ctx = ctxRef.current;
+            if (!ctx) return;
+            
+            try {
+                const s = state.current; const width = s.width; const height = s.height; const currentTheme = s.theme;
+
+                if (s.bgNeedsRedraw && bgCanvasRef.current) {
+                    const bgCtx = bgCanvasRef.current.getContext('2d');
+                    bgCtx.save();
+                    bgCtx.scale(state.current.currentRes, state.current.currentRes);
+                    Renderer.drawFloor(bgCtx, s.cols, s.rows, currentTheme);
+                    for (let r = 0; r < s.rows; r++) {
+                        for (let c = 0; c < s.cols; c++) {
+                            const t = s.board[r * s.cols + c];
+                            const isBoundary = (c === 0 || c === s.cols - 1 || r === 0 || r === s.rows - 1);
+                            if (t === 1) Renderer.drawHardBlock(bgCtx, c*TILE_SIZE, r*TILE_SIZE, isBoundary, currentTheme);
+                            else if (t === 2) Renderer.drawSoftBlock(bgCtx, c*TILE_SIZE, r*TILE_SIZE, currentTheme);
+                        }
+                    }
+                    bgCtx.restore();
+                    s.bgNeedsRedraw = false;
+                }
+
+                ctx.save();
+                ctx.scale(state.current.currentRes, state.current.currentRes);
+                ctx.clearRect(0, 0, width, height);
+
+                if (GameJuice.shakeIntensity > 0) ctx.translate((Math.random()-0.5)*GameJuice.shakeIntensity, (Math.random()-0.5)*GameJuice.shakeIntensity); 
+
+                if (bgCanvasRef.current) ctx.drawImage(bgCanvasRef.current, 0, 0, width, height);
+
+                s.fallingBlocks.forEach(b => { ctx.save(); ctx.translate(b.c*TILE_SIZE, b.r*TILE_SIZE + b.y); Renderer.drawHardBlock(ctx, 0, 0, false, currentTheme); ctx.restore(); });
+                s.powerups.forEach(pu => Renderer.drawItemBox(ctx, pu.type, pu.px, pu.py, pu.z, s.frame));
+                s.bombs.filter(b=>!b.carriedBy).forEach(b => Renderer.drawBomb(ctx, b));
+
+                if (s.boss) Renderer.drawBoss(ctx, s.boss, s.frame);
+
+                s.explosions.forEach(e => {
+                   const sizeMod = Math.sin((e.timer / e.maxTimer) * Math.PI); 
+                   if (sizeMod <= 0) return;
+                   const padding = (1 - sizeMod) * (TILE_SIZE / 2); const bx = e.c * TILE_SIZE + padding; const by = e.r * TILE_SIZE + padding; const bSize = TILE_SIZE - (padding * 2);
+                   
+                   ctx.globalCompositeOperation = 'screen';
+                   ctx.fillStyle = e.isDirty ? '#059669' : (e.isMega ? '#C026D3' : '#EA580C'); ctx.fillRect(bx, by, bSize, bSize);
+                   if (sizeMod > 0.4) {
+                       ctx.fillStyle = e.isDirty ? '#34D399' : (e.isMega ? '#E879F9' : '#FBBF24');
+                       const p2 = padding + (bSize * 0.15); const s2 = bSize * 0.7; ctx.fillRect(e.c*TILE_SIZE + p2, e.r*TILE_SIZE + p2, s2, s2);
+                       ctx.fillStyle = '#FFF'; const p3 = padding + (bSize * 0.35); const s3 = bSize * 0.3; ctx.fillRect(e.c*TILE_SIZE + p3, e.r*TILE_SIZE + p3, s3, s3);
+                   }
+                   ctx.globalCompositeOperation = 'source-over';
+                });
+
+                [...s.players].sort((a,b)=>a.y - b.y).forEach(p => Renderer.drawPlayer(ctx, p, s.frame));
+                s.bombs.filter(b=>b.carriedBy).forEach(b => Renderer.drawBomb(ctx, b));
+
+                GameJuice.shockwaves.forEach(sw => {
+                    ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI*2);
+                    ctx.lineWidth = 4 * sw.life; ctx.strokeStyle = sw.color; ctx.globalAlpha = sw.life;
+                    ctx.stroke(); ctx.globalAlpha = 1.0;
+                });
+
+                GameJuice.particles.forEach(p => {
+                   if (p.text) { 
+                       ctx.fillStyle = p.color; ctx.font='bold 14px "Press Start 2P", monospace'; ctx.textAlign='center'; 
+                       ctx.lineWidth=3; ctx.strokeStyle='#000'; ctx.strokeText(p.text, p.x, p.y); ctx.fillText(p.text, p.x, p.y); 
+                   } else if (p.type === 'wood') {
+                       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); ctx.restore();
+                   } else { 
+                       ctx.fillStyle = p.color; let alpha = Math.max(0, p.life/p.maxLife); if (p.type === 'smoke' || p.type === 'dust') alpha *= 0.35; 
+                       ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(p.x, p.y, p.size || 4, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+                   }
+                });
+
+                const gradient = ctx.createRadialGradient(width/2, height/2, height/2, width/2, height/2, width);
+                gradient.addColorStop(0, 'transparent'); gradient.addColorStop(1, 'rgba(0,0,0,0.6)');
+                ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
+
+                if (s.freezeTimer > 0) {
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; ctx.fillRect(0,0,width, height);
+                    ctx.fillStyle = '#00FFFF'; ctx.font='bold 30px "Press Start 2P"'; ctx.textAlign='center'; 
+                    ctx.lineWidth=6; ctx.strokeStyle='#000'; ctx.strokeText("TIME FROZEN", width/2, height/2); ctx.fillText("TIME FROZEN", width/2, height/2);
+                }
+
+                if (s.winner) {
+                  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, width, height);
+                  const scale = 1 + Math.sin(Date.now() / 200) * 0.05; ctx.save(); ctx.translate(width/2, height/2); ctx.scale(scale, scale);
+                  
+                  ctx.fillStyle = s.winner === 'DRAW!' ? '#AAA' : (s.winner === 'BOSS DEFEATED!' ? '#10B981' : '#FFD700'); 
+                  ctx.font = '36px "Press Start 2P", monospace'; ctx.textAlign = 'center'; ctx.textBaseline='middle';
+                  
+                  ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(s.winner, 0, -10); ctx.fillText(s.winner, 0, -10);
+                  ctx.font = '12px "Press Start 2P", monospace'; ctx.fillStyle = '#FFF'; ctx.lineWidth = 3; ctx.strokeText("TAP TO CONTINUE", 0, 40); ctx.fillText("TAP TO CONTINUE", 0, 40);
+                  ctx.restore();
+                }
+                
+                ctx.restore();
+            } catch(err) { console.error("Render Loop Error:", err); }
+          };
+
+          const gameLoop = (time) => {
+            if (!lastTimeRef.current) lastTimeRef.current = time;
+            let dt = time - lastTimeRef.current; lastTimeRef.current = time;
+            if (dt > 30) dt = 30; 
+
+            if (viewRef.current === 'playing' && state.current) {
+               if (hitStopRef.current > 0) { hitStopRef.current -= dt; } 
+               else {
+                   const s = state.current; s.frame++;
+                   
+                   if (s.frame % 15 === 0) { setUiTick(s.frame); }
+                   
+                   if (!s.winner) {
+                       if (networkState === 'host') {
+                            Object.entries(remoteInputsRef.current).forEach(([uid, input]) => {
+                                const p = s.players.find(pl => pl.uid === uid);
+                                if (p && p.alive) {
+                                    if (input.action === 'bomb') handleBombDrop(p);
+                                    if (input.action === 'special') handleSecondaryAction(p);
+                                    if (input.x) { p.x = input.x; p.y = input.y; p.dir = input.dir; p.moving = true; }
+                                }
+                            });
+                            remoteInputsRef.current = {}; 
+                       }
+
+                       handlePlayerInput(dt); 
+                       
+                       if (networkState !== 'client') { updateBots(dt); updateEntities(dt); handleItemCollection(); }
+                       GameJuice.update(dt);
+                       
+                       const gameRunningLongEnough = s.frame > 300; // Require 5 seconds to pass before allowing win states
+
+                       if (s.mode.id === 'boss') {
+                           if (s.boss && !s.boss.active) { s.winTimer += dt; if (s.winTimer > 2000) s.winner = 'BOSS DEFEATED!'; } 
+                           else if (!s.players.some(p => p.alive)) { s.winTimer += dt; if (s.winTimer > 2000) s.winner = 'GAME OVER'; }
+                       } else {
+                           if (s.mode.isTeam) {
+                               const aliveTeams = new Set(s.players.filter(p=>p.alive).map(p=>p.team));
+                               if (aliveTeams.size <= 1 && gameRunningLongEnough) {
+                                   s.winTimer += dt; if (s.winTimer > 1500) s.winner = aliveTeams.size===1 ? `TEAM ${Array.from(aliveTeams)[0]} WINS!` : 'DRAW!';
+                               } else { s.winTimer = 0; }
+                           } else {
+                               let activeCount = 0; let lastAlive = null;
+                               for (let i=0; i<s.players.length; i++) { if (s.players[i].alive) { activeCount++; lastAlive = s.players[i]; } }
+                               if (activeCount <= 1 && gameRunningLongEnough) {
+                                   s.winTimer += dt; if (s.winTimer > 1500) s.winner = (activeCount === 1 && lastAlive) ? `${lastAlive.name} WINS!` : 'DRAW!'; 
+                               } else { s.winTimer = 0; }
+                           }
+                       }
+
+                       if (networkState === 'host' && user && roomId) {
+                           syncTimerRef.current += dt;
+                           if (syncTimerRef.current > 120) {
+                               syncTimerRef.current = 0;
+                               setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId), {
+                                   gameState: JSON.stringify({ players: s.players, bombs: s.bombs, explosions: s.explosions, powerups: s.powerups, fallingBlocks: s.fallingBlocks, timer: s.timer, winner: s.winner, boss: s.boss })
+                               }, {merge:true});
+                           }
+                       }
+                   }
+               }
+               renderGame();
+            } else if (viewRef.current === 'customize' && canvasRef.current) {
+               const ctx = canvasRef.current.getContext('2d');
+               ctx.save(); ctx.scale(RES, RES); ctx.clearRect(0,0,200,200);
+               const t = Date.now();
+               const demoP = { alive: true, iFrames: 0, isGhost: false, x: 100, y: 120, moving: true, dir: 'down', colorIdx: 0, body: customRef.current.color, limb: customRef.current.limb, visor: '#00FFFF', helmet: customRef.current.helmet, name: '' };
+               Renderer.drawPlayer(ctx, demoP, t / 16);
+               ctx.restore();
+            } else if (viewRef.current === 'editor' && canvasRef.current) {
+               renderEditor();
+            }
+            
+            if (['playing', 'customize', 'editor'].includes(viewRef.current)) {
+                reqRef.current = requestAnimationFrame(gameLoop);
+            }
+          };
+
+          useEffect(() => { 
+              viewRef.current = view; 
+              if (reqRef.current) { cancelAnimationFrame(reqRef.current); reqRef.current = null; }
+              if (['playing', 'customize', 'editor'].includes(view)) {
+                 lastTimeRef.current = performance.now(); reqRef.current = requestAnimationFrame(gameLoop);
+              } else {
+                 Sfx.updateFuseSound(0); 
+              }
+              return () => { if (reqRef.current) { cancelAnimationFrame(reqRef.current); reqRef.current = null; } }
+          }, [view, editorMap]); // added editorMap to dependencies so it redraws on change
+
+          const p1 = state.current.players?.find(p => p.uid === user?.uid) || state.current.players?.[0] || {};
+          const hasSecondaryAction = p1.hasPunch || p1.hasGlove || p1.mount;
+
+          return (
+            <div className="flex flex-col h-[100dvh] w-screen bg-[#050505] text-white overflow-hidden select-none touch-none relative">
+              
+              {/* Global Fullscreen Button */}
+              {view !== 'playing' && (
+                  <button onClick={toggleFullscreen} className="absolute top-4 right-4 z-50 px-3 py-2 bg-slate-800/80 backdrop-blur border border-slate-600 rounded-lg text-white font-bold text-[10px] sm:text-xs shadow-lg hover:bg-slate-700 transition-colors">
+                      {isFullscreen ? '🗗 EXIT FS' : '🖵 FULLSCREEN'}
+                  </button>
+              )}
+
+              {view === 'menu' && (
+                <div className="flex-1 flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 to-black relative">
+                  {/* Decorative glowing background orbs */}
+                  <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+                  <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+
+                  <div className="glass-panel p-8 sm:p-10 rounded-3xl max-w-md w-full flex flex-col relative z-10 shadow-2xl border-t border-slate-700">
+                    <h1 className="text-3xl sm:text-4xl font-black italic text-white arcade-font mb-8 text-center shrink-0 tracking-widest neon-text leading-relaxed">
+                        LAST MAN<br/>STANDING
+                    </h1>
+                    
+                    <div className="flex flex-col gap-4 shrink-0 w-full mb-6">
+                        <button onClick={() => { setView('local_setup'); Sfx.init(); Sfx.playUI(); }} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-black font-black uppercase tracking-wider py-4 text-sm sm:text-base rounded-xl shadow-[0_4px_0_#047857] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all">
+                            Local Play
+                        </button>
+                        <button onClick={() => { setView('online_setup'); Sfx.init(); Sfx.playUI(); }} className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-black uppercase tracking-wider py-4 text-sm sm:text-base rounded-xl shadow-[0_4px_0_#1D4ED8] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all">
+                            Online Co-Op
+                        </button>
+                    </div>
+
+                    <div className="flex justify-between gap-4 mb-2 shrink-0">
+                        <button onClick={() => { setView('customize'); Sfx.init(); Sfx.playUI(); }} className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold py-3 text-xs rounded-xl shadow-[0_4px_0_#5B21B6] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2">
+                            👔 Locker Room
+                        </button>
+                        <button onClick={() => { openEditor(); Sfx.init(); Sfx.playUI(); }} className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold py-3 text-xs rounded-xl shadow-[0_4px_0_#B45309] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2">
+                            🛠️ Map Editor
+                        </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {view === 'customize' && (
+                  <div className="flex-1 flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 to-black relative">
+                  <div className="glass-panel p-8 rounded-3xl max-w-md w-full flex flex-col relative z-10 shadow-2xl border-t border-slate-700">
+                      <h2 className="text-center text-xl font-bold mb-6 text-fuchsia-400 tracking-wider">LOCKER ROOM</h2>
+                      
+                      <div className="flex justify-center mb-8">
+                          <div className="w-[160px] h-[160px] bg-slate-900/50 rounded-full border border-fuchsia-500/30 flex items-center justify-center shadow-inner overflow-hidden relative">
+                              <div className="absolute inset-0 bg-fuchsia-500/10 animate-pulse"></div>
+                              <canvas ref={canvasRef} width={200 * RES} height={200 * RES} style={{width: 200, height: 200}} className="scale-[1.5] relative z-10" />
+                          </div>
+                      </div>
+
+                      <div className="mb-6">
+                          <h3 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Suit Color</h3>
+                          <div className="flex gap-3 flex-wrap justify-center">
+                              {CUSTOM_COLORS.map(c => (
+                                  <button key={c} onClick={() => setUiColor(c)} className={`w-10 h-10 rounded-full transition-all ${uiColor===c?'ring-4 ring-fuchsia-400 scale-110 shadow-[0_0_15px_rgba(232,121,249,0.5)]':'ring-1 ring-slate-600 opacity-70 hover:opacity-100'}`} style={{backgroundColor: c}}></button>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="mb-8">
+                          <h3 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Helmet</h3>
+                          <div className="grid grid-cols-3 gap-2">
+                              {HELMETS.map(h => (
+                                  <button key={h.id} onClick={() => setUiHelmet(h.id)} className={`py-2 text-[10px] font-bold rounded-lg transition-all ${uiHelmet===h.id?'bg-fuchsia-600 text-white shadow-[0_0_10px_rgba(192,38,211,0.5)]':'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                                      {h.name}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+
+                      <button onClick={() => setView('menu')} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-black font-black uppercase tracking-wider py-4 rounded-xl shadow-[0_4px_0_#047857] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all">Save & Return</button>
+                  </div>
+                  </div>
+              )}
+
+              {view === 'editor' && (
+                  <div className="flex flex-col h-full w-full bg-slate-950">
+                      <div className="glass-panel p-3 flex justify-between items-center border-b border-slate-800 z-20">
+                          <div className="text-amber-500 font-bold text-sm tracking-wider flex items-center gap-2"><span className="text-xl">🛠️</span> BUILDER</div>
+                          <div className="flex gap-2 bg-slate-900/50 p-1 rounded-lg">
+                              <button onClick={()=>setEditorTool(1)} className={`p-2 rounded transition-colors ${editorTool===1?'bg-slate-600 shadow-inner':'hover:bg-slate-800'}`}>🧱 Wall</button>
+                              <button onClick={()=>setEditorTool(2)} className={`p-2 rounded transition-colors ${editorTool===2?'bg-amber-700 shadow-inner':'hover:bg-slate-800'}`}>📦 Crate</button>
+                              <button onClick={()=>setEditorTool(0)} className={`p-2 rounded transition-colors ${editorTool===0?'bg-emerald-800 shadow-inner':'hover:bg-slate-800'}`}>🟩 Eraser</button>
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={() => initGame(GAME_MODES.CLASSIC, 'CUSTOM', 'CLASSIC', false, editorMap.board)} className="bg-emerald-500 hover:bg-emerald-400 px-4 py-2 text-black font-bold rounded shadow-[0_2px_0_#047857] active:translate-y-0.5 active:shadow-none">TEST</button>
+                              <button onClick={() => setView('menu')} className="bg-rose-500 hover:bg-rose-400 px-4 py-2 text-white font-bold rounded shadow-[0_2px_0_#9F1239] active:translate-y-0.5 active:shadow-none">EXIT</button>
+                          </div>
+                      </div>
+                      <div className="flex-1 flex justify-center items-center p-4 min-h-0 bg-black overflow-hidden">
+                          <div className="relative w-full h-full flex justify-center items-center">
+                              <canvas 
+                                ref={canvasRef} 
+                                width={editorMap?.cols * TILE_SIZE * RES || 100}
+                                height={editorMap?.rows * TILE_SIZE * RES || 100}
+                                onPointerDown={(e) => { e.target.setPointerCapture(e.pointerId); handleEditorDraw(e); }}
+                                onPointerMove={(e) => { if(e.buttons > 0) handleEditorDraw(e); }}
+                                className="border border-slate-700 shadow-[0_0_50px_rgba(0,0,0,0.8)] cursor-crosshair touch-none rounded" 
+                                style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                              />
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {view === 'online_setup' && (
+                  <div className="flex-1 flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 to-black relative">
+                  <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+                  <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-2xl w-full flex flex-col relative z-10 shadow-2xl border-t border-slate-700 max-h-[90vh]">
+                      <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                          <h2 className="text-xl font-black text-cyan-400 tracking-wider">MULTIPLAYER LOBBY</h2>
+                          <button onClick={createHostRoom} className="bg-cyan-500 text-black font-bold px-4 py-2 rounded-lg shadow-[0_2px_0_#0284C7] hover:brightness-110 active:translate-y-0.5 active:shadow-none transition-all text-sm">
+                              + HOST GAME
+                          </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto mb-6 pr-2 space-y-3 min-h-[250px] scrollbar-hide">
+                          {availableRooms.length === 0 ? (
+                              <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                                  <div className="text-4xl mb-2">📡</div>
+                                  <div>No active games found.</div>
+                                  <div className="text-xs mt-1">Host a game to play with friends!</div>
+                              </div>
+                          ) : (
+                              availableRooms.map(room => (
+                                  <div key={room.id} className="bg-slate-800/80 border border-slate-700 p-4 rounded-xl flex justify-between items-center hover:bg-slate-700/80 transition-colors">
+                                      <div>
+                                          <div className="font-bold text-white mb-1 flex items-center gap-2">
+                                              <span className="text-cyan-400">[{room.id}]</span> 
+                                              {GAME_MODES[room.config.mode]?.name || 'Game'}
+                                          </div>
+                                          <div className="text-xs text-slate-400 flex gap-3">
+                                              <span>🗺️ {MAP_SIZES[room.config.mapSize]?.name.split('(')[0]}</span>
+                                              <span>👥 {room.players?.length || 1}/6 Players</span>
+                                          </div>
+                                      </div>
+                                      <button onClick={() => joinRoom(room.id)} className="bg-emerald-500 text-black font-bold px-5 py-2 rounded-lg shadow-[0_2px_0_#047857] hover:brightness-110 active:translate-y-0.5 active:shadow-none transition-all">
+                                          JOIN
+                                      </button>
+                                  </div>
+                              ))
+                          )}
+                      </div>
+
+                      <div className="border-t border-slate-800 pt-6">
+                         <div className="flex gap-2">
+                             <input type="text" placeholder="PRIVATE CODE" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} maxLength={4} className="flex-1 bg-slate-900 text-white font-bold text-center p-3 rounded-lg border border-slate-700 focus:outline-none focus:border-cyan-500 uppercase tracking-widest" />
+                             <button onClick={() => joinRoom(joinCode)} className="bg-slate-700 text-white font-bold px-6 rounded-lg hover:bg-slate-600 transition-colors">JOIN</button>
+                         </div>
+                      </div>
+                      
+                      <button onClick={() => setView('menu')} className="mt-6 text-slate-500 hover:text-white text-xs font-bold uppercase tracking-wider text-center w-full">Back to Menu</button>
+                  </div>
+                  </div>
+              )}
+
+              {(view === 'local_setup' || view === 'lobby') && (
+                <div className="flex-1 flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 to-black relative">
+                  <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-lg w-full flex flex-col max-h-[95vh] relative z-10 overflow-y-auto scrollbar-hide shadow-2xl border-t border-slate-700">
+                    
+                    {view === 'lobby' && (
+                        <div className="bg-slate-900/80 border border-cyan-500/30 p-5 rounded-2xl text-center mb-6 shadow-inner relative overflow-hidden">
+                            <div className="absolute inset-0 bg-cyan-500/5 animate-pulse"></div>
+                            <div className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider relative z-10">Room Code</div>
+                            <div className="text-4xl text-white font-black tracking-widest mb-4 relative z-10">{roomId}</div>
+                            
+                            <div className="text-xs font-bold text-cyan-400 mb-3 border-t border-slate-800 pt-3 uppercase tracking-wider relative z-10">Connected Players ({lobbyPlayers.length}/6)</div>
+                            <div className="flex flex-wrap justify-center gap-2 relative z-10">
+                                {lobbyPlayers.map((lp, i) => (
+                                    <div key={i} className="bg-slate-800 px-3 py-1.5 border border-slate-600 rounded-lg text-[10px] sm:text-xs font-bold flex items-center shadow-sm">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-400 mr-2 shadow-[0_0_5px_#34D399]"></div>
+                                        {lp.name} {lp.uid === user?.uid ? <span className="text-slate-400 ml-1">(You)</span> : ''}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {view === 'lobby' && networkState === 'client' ? (
+                        <div className="flex-1 flex flex-col justify-center items-center py-8">
+                            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                            <div className="text-xl font-bold text-white mb-2">Connected & Ready</div>
+                            <div className="text-sm text-slate-400 text-center">Waiting for the host to configure<br/>and start the match...</div>
+                            <button onClick={leaveRoom} className="mt-8 px-6 py-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg font-bold text-sm transition-colors border border-rose-500/20">Leave Lobby</button>
+                        </div>
+                    ) : (
+                    <>
+                        <h2 className="text-center text-xs mb-3 text-rose-400 font-bold uppercase tracking-wider pt-2">Total Players (Humans + Bots)</h2>
+                        <div className="flex justify-center gap-2 mb-6 shrink-0 flex-wrap">
+                        {[1,2,3,4,5,6].map(num => (
+                            <button key={num} onClick={() => { setPlayerCount(num); Sfx.init(); Sfx.playUI(); }} className={`w-10 h-10 rounded-xl font-black text-sm shadow-md transition-all ${playerCount === num ? 'bg-rose-500 text-white shadow-[0_3px_0_#9F1239] translate-y-[-2px]' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'}`}>
+                                {num}
+                            </button>
+                        ))}
+                        </div>
+
+                        <h2 className="text-center text-xs mb-3 text-cyan-400 font-bold uppercase tracking-wider border-t border-slate-800 pt-4">Map Layout</h2>
+                        <div className="grid grid-cols-3 gap-2 mb-6 shrink-0">
+                        {Object.entries(MAP_SIZES).map(([key, size]) => {
+                            if (key === 'CUSTOM') return null;
+                            return (
+                            <button key={key} onClick={() => { setMapSize(key); Sfx.init(); Sfx.playUI(); }} className={`px-2 py-3 rounded-xl font-bold text-[10px] sm:text-xs shadow-md transition-all flex flex-col items-center justify-center ${mapSize === key ? 'bg-cyan-500 text-black shadow-[0_3px_0_#0284C7] translate-y-[-2px]' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'}`}>
+                                <span>{size.name.split('(')[0]}</span>
+                                <span className={`text-[8px] mt-1 ${mapSize === key ? 'text-slate-800' : 'text-slate-500'}`}>Max {size.max}P</span>
+                            </button>
+                            )
+                        })}
+                        </div>
+
+                        <h2 className="text-center text-xs mb-3 text-emerald-400 font-bold uppercase tracking-wider border-t border-slate-800 pt-4">Visual Theme</h2>
+                        <div className="flex justify-center gap-2 mb-6 shrink-0 flex-wrap">
+                        {Object.entries(MAP_THEMES).map(([key, theme]) => (
+                            <button key={key} onClick={() => { setMapTheme(key); Sfx.init(); Sfx.playUI(); }} className={`px-4 py-2 rounded-xl font-bold text-[10px] sm:text-xs shadow-md transition-all ${mapTheme === key ? 'bg-emerald-500 text-black shadow-[0_3px_0_#047857] translate-y-[-2px]' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'}`}>
+                                {theme.name}
+                            </button>
+                        ))}
+                        </div>
+
+                        <h2 className="text-center text-xs mb-3 text-amber-400 font-bold uppercase tracking-wider border-t border-slate-800 pt-4">Game Mode</h2>
+                        <div className="flex-1 space-y-2 mb-8 shrink-0 h-40 overflow-y-auto pr-2 scrollbar-hide">
+                            {Object.values(GAME_MODES).map(mode => (
+                            <button key={mode.id} onClick={() => { setSelectedMode(mode); Sfx.init(); Sfx.playUI(); }} className={`w-full p-3 text-left transition-all flex flex-col rounded-xl border ${selectedMode.id === mode.id ? 'bg-amber-500 border-amber-400 text-black shadow-[0_3px_0_#B45309] translate-y-[-2px]' : 'bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700'}`}>
+                                <div className="font-black text-xs sm:text-sm uppercase tracking-wide mb-1">{mode.name}</div>
+                                <div className={`text-[10px] font-medium ${selectedMode.id === mode.id ? 'text-amber-900' : 'text-slate-400'}`}>
+                                    {mode.isTeam ? '🤝 Team Battle' : '⚔️ Free For All'} • {mode.timer === -1 ? 'Infinite' : `${mode.timer}s`} • Lives: {mode.startLives}
+                                </div>
+                            </button>
+                            ))}
+                        </div>
+                        
+                        {networkState === 'host' ? (
+                            <button onClick={(e) => { e.stopPropagation(); startNetworkGame(); }} className="w-full shrink-0 bg-gradient-to-r from-rose-500 to-rose-400 text-white font-black uppercase tracking-wider py-4 sm:py-5 text-sm sm:text-base rounded-xl shadow-[0_4px_0_#9F1239] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all">
+                                Launch Online Match
+                            </button>
+                        ) : (
+                            <button onClick={(e) => { e.stopPropagation(); initGame(selectedMode, mapSize, mapTheme, false); }} className="w-full shrink-0 bg-gradient-to-r from-rose-500 to-rose-400 text-white font-black uppercase tracking-wider py-4 sm:py-5 text-sm sm:text-base rounded-xl shadow-[0_4px_0_#9F1239] hover:brightness-110 active:translate-y-1 active:shadow-none transition-all">
+                                Start Local Game
+                            </button>
+                        )}
+                        <button onClick={() => { view === 'lobby' ? leaveRoom() : setView('menu'); }} className="mt-5 text-slate-500 hover:text-white text-xs font-bold uppercase tracking-wider text-center w-full transition-colors">
+                            {view === 'lobby' ? 'Cancel & Leave' : 'Back to Menu'}
+                        </button>
+                    </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {view === 'playing' && (
+                <div className="flex-1 flex flex-col h-[100dvh] w-full overflow-hidden bg-slate-950 relative">
+                  
+                  <div className="
+                      px-3 py-2 flex flex-col z-30 shrink-0
+                      portrait:bg-slate-900 portrait:border-b border-slate-800 portrait:shadow-xl portrait:relative
+                      landscape:absolute landscape:top-0 landscape:left-0 landscape:w-full landscape:bg-transparent landscape:pointer-events-none
+                  ">
+                     <div className="flex justify-between items-center w-full mb-2 px-1 landscape:pointer-events-auto">
+                         {state.current.mode.timer > 0 ? (
+                            <div className={`glass-panel text-white font-black text-xl px-5 py-1 border-t border-slate-700 text-center w-36 shrink-0 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${state.current.timer <= 60 ? 'text-rose-400 ring-2 ring-rose-500/50 animate-pulse' : ''}`}>
+                                ⏱️ {Math.floor(Math.max(0, state.current.timer) / 60)}:{(Math.max(0, state.current.timer) % 60).toString().padStart(2, '0')}
+                            </div>
+                         ) : <div className="glass-panel text-cyan-400 font-black text-xl px-5 py-1 border-t border-slate-700 text-center w-36 shrink-0 rounded-xl shadow-lg">∞</div>}
+                         
+                         <div className="text-slate-400 font-bold text-[10px] uppercase tracking-widest portrait:block landscape:hidden bg-slate-950/50 px-3 py-1 rounded-full">{state.current.mode.name}</div>
+                         
+                         <div className="flex items-center gap-2">
+                             <button onClick={(e) => { e.stopPropagation(); Sfx.playUI(); toggleFullscreen(); }} className="bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-white text-xs border border-slate-600 shadow-sm transition-colors">
+                                {isFullscreen ? '🗗' : '🖵'}
+                             </button>
+                             <button onClick={(e) => { e.stopPropagation(); Sfx.playUI(); setNetworkState('offline'); setView('menu'); }} className="bg-rose-500 hover:bg-rose-400 px-4 py-2 rounded-lg text-white text-xs font-bold shadow-[0_2px_0_#9F1239] active:translate-y-0.5 active:shadow-none transition-all">QUIT</button>
+                         </div>
+                     </div>
+
+                     <div className="flex gap-2 overflow-x-auto w-full scrollbar-hide px-1 pb-1 landscape:pointer-events-auto landscape:opacity-90">
+                        {state.current.players.map((p, i) => (
+                           <div key={i} className={`flex flex-col bg-slate-800/80 px-3 py-1.5 border border-slate-700 rounded-lg shadow-sm shrink-0 min-w-[100px] ${!p.alive ? 'opacity-40 grayscale' : ''}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center">
+                                      <div className="w-2.5 h-2.5 mr-2 rounded-full shadow-sm" style={{backgroundColor: p.body, border: `1px solid ${p.limb}`}}></div>
+                                      <span className="font-bold text-[10px] text-white truncate max-w-[65px] uppercase">
+                                          {p.name}
+                                      </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 font-bold">{p.lives>1?`x${p.lives}`:''}</span>
+                              </div>
+                              <div className="flex gap-1 h-3 text-[11px] items-center">
+                                  {p.team && <span className="text-[8px] bg-slate-900 px-1 rounded text-slate-400">T{p.team}</span>}
+                                  {p.hasKick && <span>🥾</span>} {p.hasPunch && <span>🥊</span>} {p.hasGlove && <span>🧤</span>}
+                                  {p.hasDirty && <span>☣️</span>} {p.hasMega && <span>☢️</span>} {p.hasShield && <span>🛡️</span>}
+                                  {p.mount === 16 && <span>🦖</span>} {p.mount === 17 && <span>🤖</span>} {p.mount === 18 && <span>🐎</span>} {p.mount === 19 && <span>🐬</span>}
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+
+                  <div className="
+                      relative flex-1 w-full min-h-0 min-w-0 flex justify-center items-center overflow-hidden z-10
+                      portrait:flex-[7] portrait:p-2 
+                      landscape:absolute landscape:inset-0 landscape:w-full landscape:h-[100dvh] landscape:p-0
+                  " style={{ background: 'radial-gradient(circle, #1E293B 0%, #050505 100%)' }}>
+                     <canvas 
+                       ref={canvasRef} 
+                       width={state.current.cols * TILE_SIZE * state.current.currentRes}
+                       height={state.current.rows * TILE_SIZE * state.current.currentRes}
+                       onClick={(e) => { e.stopPropagation(); if(state.current.winner) { setNetworkState('offline'); setView('menu'); } }}
+                       className="border-4 border-slate-800 shadow-[0_0_80px_rgba(0,0,0,0.8)] rounded-md cursor-pointer relative z-10 bg-black" 
+                       style={{ width: '100%', height: '100%', objectFit: 'contain', aspectRatio: `${state.current.cols}/${state.current.rows}` }} 
+                     />
+                  </div>
+
+                  <div className="
+                      w-full flex justify-between shrink-0 select-none 
+                      portrait:flex-[3] portrait:bg-slate-950 portrait:border-t border-slate-800 portrait:items-center portrait:px-4 sm:portrait:px-12 portrait:py-2 portrait:shadow-[inset_0_10px_30px_rgba(0,0,0,0.9)] portrait:pb-[max(0.5rem,env(safe-area-inset-bottom))] portrait:z-20
+                      landscape:absolute landscape:bottom-0 landscape:left-0 landscape:items-end landscape:px-8 landscape:pb-[max(1.5rem,env(safe-area-inset-bottom))] landscape:pointer-events-none landscape:z-40 landscape:h-auto
+                  ">
+                      <div className="
+                          relative 
+                          portrait:h-full portrait:aspect-square portrait:max-h-[220px] portrait:min-h-[140px] portrait:w-[45%] portrait:max-w-[220px]
+                          landscape:w-[160px] landscape:h-[160px] landscape:pointer-events-auto landscape:opacity-60 landscape:bg-slate-900/80 landscape:rounded-full landscape:shadow-2xl landscape:backdrop-blur
+                      ">
+                         <button className="absolute top-0 left-1/2 -translate-x-1/2 w-[38%] h-[42%] bg-slate-800 border border-slate-600 rounded-t-2xl active:bg-slate-700 shadow-[0_6px_0_#0F172A] flex items-center justify-center text-slate-300 text-3xl pb-2 transition-colors" onPointerDown={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.y = -1}} onPointerUp={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.y = 0}} onPointerLeave={()=>{touchDpad.current.y = 0}}>▲</button>
+                         <button className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[38%] h-[42%] bg-slate-800 border border-slate-600 rounded-b-2xl active:bg-slate-700 shadow-[0_6px_0_#0F172A] flex items-center justify-center text-slate-300 text-3xl pt-2 transition-colors" onPointerDown={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.y = 1}} onPointerUp={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.y = 0}} onPointerLeave={()=>{touchDpad.current.y = 0}}>▼</button>
+                         <button className="absolute left-0 top-1/2 -translate-y-1/2 w-[42%] h-[38%] bg-slate-800 border border-slate-600 rounded-l-2xl active:bg-slate-700 shadow-[0_6px_0_#0F172A] flex items-center justify-center text-slate-300 text-3xl pr-2 transition-colors" onPointerDown={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.x = -1}} onPointerUp={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.x = 0}} onPointerLeave={()=>{touchDpad.current.x = 0}}>◀</button>
+                         <button className="absolute right-0 top-1/2 -translate-y-1/2 w-[42%] h-[38%] bg-slate-800 border border-slate-600 rounded-r-2xl active:bg-slate-700 shadow-[0_6px_0_#0F172A] flex items-center justify-center text-slate-300 text-3xl pl-2 transition-colors" onPointerDown={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.x = 1}} onPointerUp={(e)=>{e.preventDefault(); e.stopPropagation(); touchDpad.current.x = 0}} onPointerLeave={()=>{touchDpad.current.x = 0}}>▶</button>
+                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[30%] h-[30%] bg-slate-900 rounded-full shadow-inner border border-slate-700"></div>
+                      </div>
+
+                      <div className="
+                          relative flex justify-end items-end gap-3 sm:gap-6
+                          portrait:h-full portrait:aspect-[2/1] portrait:max-h-[220px] portrait:min-h-[140px] portrait:w-[50%] portrait:max-w-[400px] portrait:pb-4
+                          landscape:pointer-events-auto landscape:w-auto landscape:h-[130px] landscape:gap-5 landscape:opacity-80
+                      ">
+                         <button className={`transition-all duration-150 rounded-full border border-white/20 flex items-center justify-center text-4xl sm:text-5xl
+                                 portrait:w-[45%] portrait:h-[90%] 
+                                 landscape:w-[80px] landscape:h-[80px] landscape:mb-2
+                                 ${hasSecondaryAction ? 'bg-cyan-500 active:bg-cyan-400 shadow-[0_8px_0_#0284C7] active:translate-y-2' : 'bg-slate-800 shadow-[0_8px_0_#0F172A] opacity-50'}
+                                 `} 
+                                 onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); actionSecondaryBtn.current = true; }}
+                                 onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); actionSecondaryBtn.current = false; }}
+                                 onPointerLeave={() => { actionSecondaryBtn.current = false; }}>
+                            {p1.mount === 16 ? '🔥' : p1.mount === 18 ? '⬆️' : p1.mount === 19 ? '🌊' : p1.hasGlove ? '🧤' : p1.hasPunch ? '🥊' : '⭕'}
+                         </button>
+                         
+                         <button className="transition-all duration-150 rounded-full bg-rose-500 active:bg-rose-400 border border-white/20 shadow-[0_10px_0_#9F1239] active:translate-y-3 flex items-center justify-center text-5xl sm:text-6xl
+                                 portrait:w-[55%] portrait:h-[100%]
+                                 landscape:w-[110px] landscape:h-[110px]" 
+                                 onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); actionPrimaryBtn.current = true; }}
+                                 onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); actionPrimaryBtn.current = false; }}
+                                 onPointerLeave={() => { actionPrimaryBtn.current = false; }}>
+                            💣
+                         </button>
+                      </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+
+```
